@@ -1,0 +1,58 @@
+project_name: Nengo Interface
+pkg_name: nengo_interfaces
+repo_name: nengo/nengo-interfaces
+
+description: Simplified external input and output communication
+copyright_start: 2020
+
+license_rst: {}
+
+contributing_rst: {}
+
+contributors_rst: {}
+
+# manifest_in:
+
+setup_py:
+  install_req:
+    - nengo>=3.0.0
+  tests_req:
+    - pytest>=4.3.0
+  classifiers:
+    - "Development Status :: 5 - Alpha"
+    - "Framework :: Nengo"
+    - "Intended Audience :: Science/Research"
+    - "License :: Free for non-commercial use"
+    - "Operating System :: OS Independent"
+    - "Programming Language :: Python "
+    - "Programming Language :: Python :: 3.5"
+    - "Programming Language :: Python :: 3.6"
+    - "Programming Language :: Python :: 3.7"
+    - "Topic :: Scientific/Engineering "
+    - "Topic :: Scientific/Engineering :: Artificial Intelligence"
+
+# setup_cfg:
+#   coverage:
+#     omit_files:
+#
+#   flake8:
+#     exclude:
+#
+#   pylint:
+#     ignore:
+#
+#     disable:
+
+
+travis_yml:
+  python: 3.6
+  global_vars:
+    NUMPY: numpy
+  jobs:
+    - script: static
+  pypi_user: studywolf
+
+ci_scripts:
+  - template: static
+
+codecov_yml: {}
