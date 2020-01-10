@@ -24,7 +24,6 @@ class MujocoProcess(nengo.Process):
 
         super().__init__(size_in, size_out, **kwargs)
 
-
     def make_step(self, shape_in, shape_out, dt, rng, state):
 
         self.interface.disconnect()
@@ -35,7 +34,7 @@ class MujocoProcess(nengo.Process):
             update_display = not int(t / dt) % self.update_display
             self.interface.send_forces(u, update_display=update_display)
             feedback = self.interface.get_feedback()
-            return np.hstack([feedback['q'], feedback['dq']])
+            return np.hstack([feedback["q"], feedback["dq"]])
 
         return step
 
@@ -43,8 +42,5 @@ class MujocoProcess(nengo.Process):
 def Mujoco(robot_name, **kwargs):
     process = MujocoProcess(robot_name, **kwargs)
     return nengo.Node(
-        process,
-        process.default_size_in,
-        process.default_size_out,
-        label='Mujoco'
+        process, process.default_size_in, process.default_size_out, label="Mujoco"
     )

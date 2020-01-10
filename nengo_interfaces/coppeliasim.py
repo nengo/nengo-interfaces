@@ -10,7 +10,7 @@ class CoppeliaSimProcess(nengo.Process):
 
         self.dt = dt
 
-        arm = importlib.import_module('abr_control.arms.' + robot_name)
+        arm = importlib.import_module("abr_control.arms." + robot_name)
         self.config = arm.Config()
         print(self.config)
         self.interface = None
@@ -19,7 +19,6 @@ class CoppeliaSimProcess(nengo.Process):
         size_out = size_in * 2
 
         super().__init__(size_in, size_out, **kwargs)
-
 
     def make_step(self, shape_in, shape_out, dt, rng, state):
 
@@ -32,7 +31,7 @@ class CoppeliaSimProcess(nengo.Process):
         def step(t, u):
             self.interface.send_forces(u)
             feedback = self.interface.get_feedback()
-            return np.hstack([feedback['q'], feedback['dq']])
+            return np.hstack([feedback["q"], feedback["dq"]])
 
         return step
 
@@ -40,8 +39,5 @@ class CoppeliaSimProcess(nengo.Process):
 def CoppeliaSim(robot_name, **kwargs):
     process = CoppeliaSimProcess(robot_name, **kwargs)
     return nengo.Node(
-        process,
-        process.default_size_in,
-        process.default_size_out,
-        label='CoppeliaSim'
+        process, process.default_size_in, process.default_size_out, label="CoppeliaSim"
     )
