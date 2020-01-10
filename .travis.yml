@@ -8,7 +8,7 @@ notifications:
     on_failure: change
 cache: pip
 
-dist: trusty
+dist: xenial
 
 env:
   global:
