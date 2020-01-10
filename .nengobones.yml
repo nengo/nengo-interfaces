@@ -31,18 +31,14 @@ setup_py:
     - "Topic :: Scientific/Engineering "
     - "Topic :: Scientific/Engineering :: Artificial Intelligence"
 
-# setup_cfg:
-#   coverage:
-#     omit_files:
-#
-#   flake8:
-#     exclude:
-#
-#   pylint:
-#     ignore:
-#
-#     disable:
-
+setup_cfg:
+  pylint:
+    ignore:
+      - _vendor
+      - compat.py
+      - nengo/spa
+    disable:
+      - missing-module-docstring
 
 travis_yml:
   python: 3.6
