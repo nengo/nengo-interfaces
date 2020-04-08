@@ -360,131 +360,13 @@ gravity_compensation = np.array([[9.81], [9.81], [9.81], [9.81]])
 #                                         [5.6535],
 #                                         ])
 
-
-
-state, orientation = interface.get_feedback()
-orientation = t.euler_from_quaternion(orientation, 'rzyx')
-state[6] = orientation[0]
-state[7] = orientation[1]
-state[8] = orientation[2]
-# state = np.array([state[0], state[1], state[2], 0, 0, 0, 0, 0, 0, 0, 0, 0])
 target = np.array([0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0])
-
-def calc_brent_error(target, state):
-    # Find the error
-    # ori_err = [t_ori[0] - ori[0],
-    #                 t_ori[1] - ori[1],
-    #                 t_ori[2] - ori[2]]
-    ori_err = [target[6] - state[6],
-               target[7] - state[7],
-               target[8] - state[8]
-               ]
-    # cz = math.cos(ori[2])
-    cz = math.cos(state[4])
-    # sz = math.sin(ori[2])
-    sz = math.sin(state[4])
-    # x_err = t_pos[0] - pos[0]
-    x_err = target[0] - state[0]
-    # y_err = t_pos[1] - pos[1]
-    y_err = target[1] - state[1]
-    # pos_err = [ x_err * cz + y_err * sz,
-    #                 -x_err * sz + y_err * cz,
-    #                     t_pos[2] - pos[2]]
-
-    # NOTE: ignoring velocity errors for initial implementation
-    error = np.array([[x_err * cz + y_err * sz,
-             -x_err * sz + y_err * cz,
-             target[2] - state[2],
-             0, 0, 0,
-             ori_err[0],
-             ori_err[1],
-             ori_err[2],
-             0,0,0]]).T
-    return error
-
-def calc_norm_error(target, state):
-    return np.linalg.norm(target**2-state**2)
-
-# NOTE brent clipped u out to be 0-30
-def convert_to_pwm(u, max_u):
-    pwm = np.squeeze(u/max_u)
-    pwm = np.clip(pwm, 0, 1)
-    return pwm
-
-# from brent's repo
-def b( num ):
-    """ forces magnitude to be 1 or less """
-    if abs( num ) > 1.0:
-        return math.copysign( 1.0, num )
-    else:
-        return num
-
-
-def convert_angles( ang ):
-    """ Converts Euler angles from x-y-z to z-x-y convention """
-
-    s1 = math.sin(ang[0])
-    s2 = math.sin(ang[1])
-    s3 = math.sin(ang[2])
-    c1 = math.cos(ang[0])
-    c2 = math.cos(ang[1])
-    c3 = math.cos(ang[2])
-
-    pitch = math.asin( b(c1*c3*s2-s1*s3) )
-    cp = math.cos(pitch)
-    # just in case
-    if cp == 0:
-        cp = 0.000001
-
-    yaw = math.asin( b((c1*s3+c3*s1*s2)/cp) ) #flipped
-    # Fix for getting the quadrants right
-    if c3 < 0 and yaw > 0:
-        yaw = math.pi - yaw
-    elif c3 < 0 and yaw < 0:
-        yaw = -math.pi - yaw
-
-    roll = math.asin( b((c3*s1+c1*s2*s3)/cp) ) #flipped
-    return [roll, pitch, yaw]
-
-
-def plot(data):
-    plt.figure()
-    plt.subplot(311)
-    plt.title('pos')
-    plt.plot(np.array(data['pos'])[:, :3], label='pos')
-    plt.plot(np.array(data['target'])[:, :3], linestyle='--', label='target')
-    plt.legend()
-    plt.subplot(312)
-    plt.title('pwm')
-    plt.plot(data['pwm'])
-    plt.legend()
-    plt.subplot(313)
-    plt.title('u')
-    plt.plot(np.squeeze(data['u']))
-    plt.legend()
-    plt.show()
-
-error = calc_brent_error(target, state)
-
 at_target = 0
 data = {'pos': [], 'target': [], 'pwm': [], 'u': []}
+
 try:
     while 1:
         print('---------')
-        error = calc_brent_error(target=target, state=state)
-        # TODO is this not w**2?
-        # TODO gravity comp is in N, how do units work out?
-        u = np.dot(rotor_transform, np.dot(gains, error)) + gravity_compensation
-        # print(u.shape)
-        # print(rotor_transform.shape)
-        # print(gains.shape)
-        # print(error.shape)
-
-        # u = np.array([u[2], u[0], u[1], u[3]])
-        pwm = convert_to_pwm(u=u, max_u=30)
-        # pwm = [1, 1, 1, 1]
-        interface.send_pwm(pwm, dt=0.001)
-
         # hacked in to pass quaternion separately
         state, orientation = interface.get_feedback()
         print('pre: ', state)
@@ -497,6 +379,56 @@ try:
         state[7] = orientation[1]
         state[8] = orientation[2]
         print('post: ', state)
+
+
+        # Find the error
+        # ori_err = [t_ori[0] - ori[0],
+        #                 t_ori[1] - ori[1],
+        #                 t_ori[2] - ori[2]]
+        ori_err = [target[6] - state[6],
+                target[7] - state[7],
+                target[8] - state[8]
+                ]
+        # cz = math.cos(ori[2])
+        cz = math.cos(state[4])
+        # sz = math.sin(ori[2])
+        sz = math.sin(state[4])
+        # x_err = t_pos[0] - pos[0]
+        x_err = target[0] - state[0]
+        # y_err = t_pos[1] - pos[1]
+        y_err = target[1] - state[1]
+        # pos_err = [ x_err * cz + y_err * sz,
+        #                 -x_err * sz + y_err * cz,
+        #                     t_pos[2] - pos[2]]
+
+        # NOTE: ignoring velocity errors for initial implementation
+        error = np.array([[x_err * cz + y_err * sz,
+                -x_err * sz + y_err * cz,
+                target[2] - state[2],
+                0, 0, 0,
+                ori_err[0],
+                ori_err[1],
+                ori_err[2],
+                0,0,0]]).T
+
+
+        # TODO is this not w**2?
+        # TODO gravity comp is in N, how do units work out?
+        u = np.dot(rotor_transform, np.dot(gains, error)) + gravity_compensation
+        # print(u.shape)
+        # print(rotor_transform.shape)
+        # print(gains.shape)
+        # print(error.shape)
+
+        # u = np.array([u[2], u[0], u[1], u[3]])
+
+        # NOTE brent clipped u out to be 0-30
+        max_u = 30
+        pwm = np.squeeze(u/max_u)
+        pwm = np.clip(pwm, 0, 1)
+
+        # pwm = [1, 1, 1, 1]
+        interface.send_pwm(pwm, dt=0.001)
 
         # print('u: ', u)
         # print('pwm: ', pwm)
@@ -516,11 +448,20 @@ try:
         if at_target > 100:
             break
 except:
-    plot(data)
+    plt.figure()
+    plt.subplot(311)
+    plt.title('pos')
+    plt.plot(np.array(data['pos'])[:, :3], label='pos')
+    plt.plot(np.array(data['target'])[:, :3], linestyle='--', label='target')
+    plt.legend()
+    plt.subplot(312)
+    plt.title('pwm')
+    plt.plot(data['pwm'])
+    plt.legend()
+    plt.subplot(313)
+    plt.title('u')
+    plt.plot(np.squeeze(data['u']))
+    plt.legend()
+    plt.show()
+
     interface.disconnect()
-
-
-
-# print('AT TARGET!')
-# interface.disconnect()
-# plot(data)
