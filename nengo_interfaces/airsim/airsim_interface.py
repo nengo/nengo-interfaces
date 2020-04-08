@@ -16,7 +16,9 @@ class AirsimInterface():
 
 
     def disconnect(self):
-        raise NotImplementedError
+        self.client.enableApiControl(False)
+        self.client.armDisarm(False)
+        self.client.reset()
 
 
     def send_pwm(self, pwm, dt):
@@ -31,6 +33,8 @@ class AirsimInterface():
         dt: float
             the time to run the pwm signal for
         """
+        # wait for command to execute
+        # self.client.takeoffAsync()
         self.client.moveByMotorPWMsAsync(pwm[0], pwm[1], pwm[2], pwm[3], dt).join()
 
     def get_feedback(self):
@@ -38,16 +42,28 @@ class AirsimInterface():
         Calls the simGetGroundTruthKinematics to get system feedback, which is then
         parsed from the airsim custom type to a dict
 
-        Returns cartesian position and quaternion orientation
+        returns dict of state in the form:
+            [x, y, z, dx, dy, dz, roll, pitch, yaw, droll, dpitch, dyaw]
+
+        the full state can be accessed from self.state with the main keys:
+            - landed_state
+            - collision
+            - timestamp
+            - kinematics estimated
+            - rc_data
+            - gps_location
         """
-        state = self.client.simGetGroundTruthKinematics()
+        # state = self.client.simGetGroundTruthKinematics()
+        # print(state)
+        state = self.client.getMultirotorState()
+        # print(state)
+        # print(state)
         # state is of type <class 'airsim.types.KinematicsState'>
         # convert to string and parse
         state = pprint.pformat(state)
-        state = re.sub('<KinematicsState> ', '', state)
-        state = re.sub('<Vector3r> ', '', state)
-        state = re.sub('<Quaternionr> ', '', state)
-        state = ast.literal_eval(state)
+        # remove extra descriptive terms that break dict formatting
+        state = re.sub('<[^>]*> ', '', state)
+        self.state = ast.literal_eval(state)
 
         # # angular vel and accel
         # w_a = state['angular_acceleration']
@@ -56,22 +72,48 @@ class AirsimInterface():
         # a = state['linear_acceleration']
         # v = state['linear_velocity']
 
-        # position and orientation
-        pos = np.array([
-                state['position']['x_val'],
-                state['position']['y_val'],
-                state['position']['z_val']
-              ])
+        # # position and orientation
+        # pos = np.array([
+        #         state['position']['x_val'],
+        #         state['position']['y_val'],
+        #         state['position']['z_val']
+        #       ])
+        #
+        # orient = np.array([
+        #             state['orientation']['w_val'],
+        #             state['orientation']['x_val'],
+        #             state['orientation']['y_val'],
+        #             state['orientation']['z_val']
+        #          ])
+        #NOTE orientation is given in quaternion, not certain about what frame to use
+        # for conversion to euluer angles, grabbing roll pitch yaw instead
+        state = np.array([
+            self.state['kinematics_estimated']['position']['x_val'],
+            self.state['kinematics_estimated']['position']['y_val'],
+            -self.state['kinematics_estimated']['position']['z_val'],
+            # self.state['kinematics_estimated']['position']['z_val'],
+            self.state['kinematics_estimated']['linear_velocity']['x_val'],
+            self.state['kinematics_estimated']['linear_velocity']['y_val'],
+            -self.state['kinematics_estimated']['linear_velocity']['z_val'],
+            # self.state['kinematics_estimated']['linear_velocity']['z_val'],
+            self.state['rc_data']['roll'],
+            self.state['rc_data']['pitch'],
+            self.state['rc_data']['yaw'],
+            self.state['kinematics_estimated']['angular_velocity']['x_val'],
+            self.state['kinematics_estimated']['angular_velocity']['y_val'],
+            -self.state['kinematics_estimated']['angular_velocity']['z_val']
+            # self.state['kinematics_estimated']['angular_velocity']['z_val']
+        ])
+        orientation = np.array([
+            self.state['kinematics_estimated']['orientation']['w_val'],
+            self.state['kinematics_estimated']['orientation']['x_val'],
+            self.state['kinematics_estimated']['orientation']['y_val'],
+            self.state['kinematics_estimated']['orientation']['z_val']
+        ])
 
-        orient = np.array([
-                    state['orientation']['w_val'],
-                    state['orientation']['x_val'],
-                    state['orientation']['y_val'],
-                    state['orientation']['z_val']
-                 ])
+        return state, orientation
 
-        return pos, orient
-
+    # NOTE see client.simGetObjectPose and client.sim.SetObjectPose for the following
     def get_orientation(self, name):
         raise NotImplementedError
 
@@ -92,17 +134,36 @@ if __name__ == '__main__':
     interface = AirsimInterface()
     interface.connect()
 
-    print('moving up')
-    steps = 10
-    for ii in range(0,steps):
-        scale = 0.8
-        pwm = np.array([1, 1, 1, 1])
-        interface.send_pwm(pwm*scale, dt=0.001)
-    for ii in range(0,steps):
-        scale = 0.8
-        pwm = np.array([-1, 1, -1, 1])
-        interface.send_pwm(pwm*scale, dt=0.001)
+    # FR, RL, FL, RR
+    l = 0.69
+    h = 0.7
+    up = [h, h, h, h]
+    down = [0.5, 0.5, 0.5, 0.5]
+    forward = [l, h, l, h]
+    backward = [h, l, h, l]
+    bend_left = [h, l, l, h]
+    bend_right = [l, h, h, l]
+    rot_left = [h, h, l, l]
+    rot_right = [l, l, h, h]
 
-        pos, orient = interface.get_feedback()
-        print('pos: ', pos)
-        print('orient: ', orient)
+    commands = [up, forward,
+                # up, bend_right,
+                # up, rot_left,
+                # up, rot_right,
+                up, backward,
+                up, backward,
+                down, down,
+                down, down,
+                down, down,
+                # up, up
+                ]
+
+    state = interface.get_feedback()
+    print(interface.state)
+    # steps = [40, 10]
+    # for ii, command in enumerate(commands):
+    #     step = steps[ii%2]
+    #     print('Command: ', command)
+    #     pos, orient = interface.get_feedback()
+    #     print('pos: ', pos)
+    #     print('orient: ', orient)
