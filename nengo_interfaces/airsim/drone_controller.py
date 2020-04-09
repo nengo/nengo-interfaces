@@ -347,10 +347,11 @@ gains = np.array([[ 0,  0, k2,  0,  0,-k4,  0,  0,  0,  0,  0,  0],
                     [-k1,  0,  0, k3,  0,  0,  0,-k5,  0,  0, k7,  0],
                     [  0,  0,  0,  0,  0,  0,  0,  0,-k6,  0,  0, k8] ])
 
-rotor_transform = np.array([[ 1,-1, 1, 1],
-                                    [ 1,-1,-1,-1],
-                                    [ 1, 1,-1, 1],
-                                    [ 1, 1, 1,-1] ])
+rotor_transform = np.array([
+    [ 1,-1, 1, 1],
+    [ 1,-1,-1,-1],
+    [ 1, 1,-1, 1],
+    [ 1, 1, 1,-1] ])
 
 # NOTE: default mass is 1kg
 gravity_compensation = np.array([[9.81], [9.81], [9.81], [9.81]])
@@ -360,66 +361,70 @@ gravity_compensation = np.array([[9.81], [9.81], [9.81], [9.81]])
 #                                         [5.6535],
 #                                         ])
 
-target = np.array([0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+# feedback = interface.get_feedback()
+# target_pos = feedback['pos'] + np.array([0, 0, 6])
+target_pos = np.array([0, 0, 6])
+target_lin_vel = np.array([0, 0, 0])
+target_ori = np.array([0, 0, 0])
+target_ang_vel = np.array([0, 0, 0])
+
 at_target = 0
 data = {'pos': [], 'target': [], 'pwm': [], 'u': []}
 
 try:
     while 1:
-        print('---------')
-        # hacked in to pass quaternion separately
-        state, orientation = interface.get_feedback()
-        print('pre: ', state)
+        feedback = interface.get_feedback()
         # convert quaternion to tait-bryan angles
-        print(orientation)
-        orientation = t.euler_from_quaternion(orientation, 'szyx')
-        print(orientation)
-        # replace roll pitch yaw with this, which I think should be the same?
-        state[6] = orientation[0]
-        state[7] = orientation[1]
-        state[8] = orientation[2]
-        print('post: ', state)
-
+        orientation = t.euler_from_quaternion(feedback['quaternion'], 'szxy')
 
         # Find the error
-        # ori_err = [t_ori[0] - ori[0],
-        #                 t_ori[1] - ori[1],
-        #                 t_ori[2] - ori[2]]
-        ori_err = [target[6] - state[6],
-                target[7] - state[7],
-                target[8] - state[8]
-                ]
-        # cz = math.cos(ori[2])
-        cz = math.cos(state[4])
-        # sz = math.sin(ori[2])
-        sz = math.sin(state[4])
-        # x_err = t_pos[0] - pos[0]
-        x_err = target[0] - state[0]
-        # y_err = t_pos[1] - pos[1]
-        y_err = target[1] - state[1]
-        # pos_err = [ x_err * cz + y_err * sz,
-        #                 -x_err * sz + y_err * cz,
-        #                     t_pos[2] - pos[2]]
+        ori_err = [target_ori[0] - orientation[0],
+                        target_ori[1] - orientation[1],
+                        target_ori[2] - orientation[2]]
+        cz = math.cos(orientation[2])
+        sz = math.sin(orientation[2])
+        x_err = target_pos[0] - feedback['pos'][0]
+        y_err = target_pos[1] - feedback['pos'][1]
+        pos_err = [ x_err * cz + y_err * sz,
+                        -x_err * sz + y_err * cz,
+                         target_pos[2] - feedback['pos'][2]]
 
-        # NOTE: ignoring velocity errors for initial implementation
-        error = np.array([[x_err * cz + y_err * sz,
-                -x_err * sz + y_err * cz,
-                target[2] - state[2],
-                0, 0, 0,
-                ori_err[0],
-                ori_err[1],
-                ori_err[2],
-                0,0,0]]).T
+        lin_vel = [
+                feedback['lin_vel'][0]*cz+feedback['lin_vel'][1]*sz,
+                -feedback['lin_vel'][0]*sz+feedback['lin_vel'][1]*cz,
+                feedback['lin_vel'][2]]
 
+        ang_vel = [
+                feedback['ang_vel'][0]*cz+feedback['ang_vel'][1]*sz,
+                -feedback['ang_vel'][0]*sz+feedback['ang_vel'][1]*cz,
+                feedback['ang_vel'][2]]
+
+        for ii in range(3):
+            if ori_err[ii] > math.pi:
+                ori_err[ii] -= 2 * math.pi
+            elif ori_err[ii] < -math.pi:
+                ori_err[ii] += 2 * math.pi
+
+        error = np.array([
+            [pos_err[0]],
+            [pos_err[1]],
+            [pos_err[2]],
+            [lin_vel[0]],
+            [lin_vel[1]],
+            [lin_vel[2]],
+            [ori_err[0]],
+            [ori_err[1]],
+            [ori_err[2]],
+            [ang_vel[0]],
+            [ang_vel[1]],
+            [ang_vel[2]],
+        ])
 
         # TODO is this not w**2?
         # TODO gravity comp is in N, how do units work out?
         u = np.dot(rotor_transform, np.dot(gains, error)) + gravity_compensation
-        # print(u.shape)
-        # print(rotor_transform.shape)
-        # print(gains.shape)
-        # print(error.shape)
 
+        # TODO check that rotor order matches
         # u = np.array([u[2], u[0], u[1], u[3]])
 
         # NOTE brent clipped u out to be 0-30
@@ -427,19 +432,23 @@ try:
         pwm = np.squeeze(u/max_u)
         pwm = np.clip(pwm, 0, 1)
 
-        # pwm = [1, 1, 1, 1]
         interface.send_pwm(pwm, dt=0.001)
 
-        # print('u: ', u)
-        # print('pwm: ', pwm)
+        print('u: ', u)
+        print('pwm: ', pwm)
         # print('state: ', state)
         # print('error: ', error)
-        data['pos'].append(state)
-        data['target'].append(target)
+
+        # state = np.hstack((
+        #     np.hstack((feedback['pos'], feedback['lin_vel'])),
+        #     np.hstack((orientation, feedback['ang_vel'])))
+        # )
+
+        data['pos'].append(feedback['pos'])
+        data['target'].append(target_pos)
         data['pwm'].append(pwm)
         data['u'].append(u)
-        # if cnt > 10:
-        #     break
+
         if np.sum(error) < 0.2:
             at_target += 1
         else:

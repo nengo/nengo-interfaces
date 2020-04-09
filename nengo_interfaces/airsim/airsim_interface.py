@@ -87,31 +87,27 @@ class AirsimInterface():
         #          ])
         #NOTE orientation is given in quaternion, not certain about what frame to use
         # for conversion to euluer angles, grabbing roll pitch yaw instead
-        state = np.array([
-            self.state['kinematics_estimated']['position']['x_val'],
-            self.state['kinematics_estimated']['position']['y_val'],
-            -self.state['kinematics_estimated']['position']['z_val'],
-            # self.state['kinematics_estimated']['position']['z_val'],
-            self.state['kinematics_estimated']['linear_velocity']['x_val'],
-            self.state['kinematics_estimated']['linear_velocity']['y_val'],
-            -self.state['kinematics_estimated']['linear_velocity']['z_val'],
-            # self.state['kinematics_estimated']['linear_velocity']['z_val'],
-            self.state['rc_data']['roll'],
-            self.state['rc_data']['pitch'],
-            self.state['rc_data']['yaw'],
-            self.state['kinematics_estimated']['angular_velocity']['x_val'],
-            self.state['kinematics_estimated']['angular_velocity']['y_val'],
-            -self.state['kinematics_estimated']['angular_velocity']['z_val']
-            # self.state['kinematics_estimated']['angular_velocity']['z_val']
-        ])
-        orientation = np.array([
-            self.state['kinematics_estimated']['orientation']['w_val'],
-            self.state['kinematics_estimated']['orientation']['x_val'],
-            self.state['kinematics_estimated']['orientation']['y_val'],
-            self.state['kinematics_estimated']['orientation']['z_val']
-        ])
+        state = {
+            'pos': np.array([
+                self.state['kinematics_estimated']['position']['x_val'],
+                self.state['kinematics_estimated']['position']['y_val'],
+                -self.state['kinematics_estimated']['position']['z_val']]),
+            'lin_vel': np.array([
+                self.state['kinematics_estimated']['linear_velocity']['x_val'],
+                self.state['kinematics_estimated']['linear_velocity']['y_val'],
+                -self.state['kinematics_estimated']['linear_velocity']['z_val']]),
+            'ang_vel': np.array([
+                self.state['kinematics_estimated']['angular_velocity']['x_val'],
+                self.state['kinematics_estimated']['angular_velocity']['y_val'],
+                -self.state['kinematics_estimated']['angular_velocity']['z_val']]),
+            'quaternion': np.array([
+                self.state['kinematics_estimated']['orientation']['w_val'],
+                self.state['kinematics_estimated']['orientation']['x_val'],
+                self.state['kinematics_estimated']['orientation']['y_val'],
+                self.state['kinematics_estimated']['orientation']['z_val']])
+        }
 
-        return state, orientation
+        return state
 
     # NOTE see client.simGetObjectPose and client.sim.SetObjectPose for the following
     def get_orientation(self, name):
