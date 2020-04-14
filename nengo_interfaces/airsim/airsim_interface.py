@@ -13,12 +13,25 @@ class AirsimInterface():
         self.client.armDisarm(True)
         # not sure if we need this yet
         # self.client.takeoffAsync().join()
+        self.is_paused = False
 
 
     def disconnect(self):
+        self.client.reset()
         self.client.enableApiControl(False)
         self.client.armDisarm(False)
-        self.client.reset()
+
+    def pause(self, sim_pause=True):
+        """
+        Parameters
+        ----------
+        sim_pause: boolean, Optional (Default: True)
+            True to pause, False to resume
+        """
+        # do not call if already in desired state
+        if sim_pause is not self.is_paused:
+            self.client.simPause(sim_pause)
+
 
 
     def send_pwm(self, pwm, dt):
