@@ -1,11 +1,14 @@
 import numpy as np
+import traceback
 import math
 import airsim_interface
 import matplotlib.pyplot as plt
 from abr_control.utils import transformations as t
 
+plot = False
 interface = airsim_interface.AirsimInterface()
 interface.connect()
+
 
 k1 = 0.43352026190263104
 k2 = 2.0 *4
@@ -115,13 +118,47 @@ at_target = 0
 cnt = 0
 data = {'pos': [], 'target': [], 'pwm': [], 'u': []}
 
+# Brent's function
+def b( num ):
+  """ forces magnitude to be 1 or less """
+  if abs( num ) > 1.0:
+    return math.copysign( 1.0, num )
+  else:
+    return num
+
+def convert_angles( ang ):
+  """ Converts Euler angles from x-y-z to z-x-y convention """
+  s1 = math.sin(ang[0])
+  s2 = math.sin(ang[1])
+  s3 = math.sin(ang[2])
+  c1 = math.cos(ang[0])
+  c2 = math.cos(ang[1])
+  c3 = math.cos(ang[2])
+
+  pitch = math.asin( b(c1*c3*s2-s1*s3) )
+  cp = math.cos(pitch)
+  # just in case
+  if cp == 0:
+    cp = 0.000001
+
+  yaw = math.asin( b((c1*s3+c3*s1*s2)/cp) ) #flipped
+  # Fix for getting the quadrants right
+  if c3 < 0 and yaw > 0:
+    yaw = math.pi - yaw
+  elif c3 < 0 and yaw < 0:
+    yaw = -math.pi - yaw
+
+  roll = math.asin( b((c3*s1+c1*s2*s3)/cp) ) #flipped
+  return [roll, pitch, yaw]
+
+
 try:
     while 1:
         cnt += 1
-        feedback = interface.get_feedback()
+        # ======================== PD CONTROLLER
+        # feedback = interface.get_feedback()
         # convert quaternion to tait-bryan angles
-        orientation = t.euler_from_quaternion(feedback['quaternion'], 'rzxy')
-
+        # orientation = t.euler_from_quaternion(feedback['quaternion'], 'rzxy')
         # # Find the error
         # ori_err = [target_ori[0] - orientation[0],
         #                 target_ori[1] - orientation[1],
@@ -177,7 +214,16 @@ try:
         # max_u = 30
         # pwm = np.squeeze(u/max_u)
         # pwm = np.clip(pwm, 0, 1)
+        # ======================================
 
+        # ===================== AIRSIM DYNAMICS
+        feedback = interface.get_feedback()
+        # convert quaternion to tait-bryan angles
+        # orientation = t.euler_from_quaternion(feedback['quaternion'], 'rzxy')
+        orientation = t.euler_from_quaternion(feedback['quaternion'], 'rzyx')
+        # brent's conversion returns the angles in reverse order for some reason
+        # flipping here to avoid having to change the transforms
+        orientation = np.array([orientation[2], orientation[1], orientation[0]])
         """
         phi == roll
         theta == pitch
@@ -186,19 +232,19 @@ try:
         converting angles to z-x-y (yaw, roll, pitch)
         in brents code the conversion returns roll,pitch,yaw, in that order
         """
-        if cnt > 50:
+        if cnt > 20:
             # w = calc_w(phi=orientation[1], theta=orientation[2], psi=orientation[0])
             w = calc_w(phi=orientation[0], theta=orientation[1], psi=orientation[2])
             # print('w: ', w)
             u = np.array([w[3], w[1], w[0], w[2]])
             # print('u: ', u)
             pwm = np.squeeze(u/max_w)
-        elif cnt > 30 and cnt < 50:
-            u = [0, 0, 0, 0]
-            pwm = u
+        # elif cnt > 30 and cnt < 50:
+        #     u = [0, 0, 0, 0]
+        #     pwm = u
         else:
             u = [1, 1, 1, 1]
-            pwm = [.9, .9, 1, 1]
+            pwm = [1, 1, 1, 1]
 
         interface.send_pwm(pwm, dt=0.001)
 
@@ -207,10 +253,10 @@ try:
         # print('state: ', state)
         # print('error: ', error)
 
-        data['pos'].append(feedback['pos'])
-        data['target'].append(target_pos)
-        data['pwm'].append(pwm)
-        data['u'].append(u)
+        # data['pos'].append(feedback['pos'])
+        # data['target'].append(target_pos)
+        # data['pwm'].append(pwm)
+        # data['u'].append(u)
 
         # if np.sum(error) < 0.2:
         #     at_target += 1
@@ -219,44 +265,49 @@ try:
         #
         # if at_target > 100:
         #     break
-except:
+except Exception as e:
+    interface.disconnect()
+    print(traceback.format_exc())
 
+else:
     interface.disconnect()
     print('disconnected')
 
-    plt.figure()
-    plt.subplot(311)
-    plt.title('pos')
-    plt.plot(np.array(data['pos'])[:, :3], label='pos')
-    plt.plot(np.array(data['target'])[:, :3], linestyle='--', label='target')
-    plt.legend()
-    plt.subplot(312)
-    plt.title('pwm')
-    plt.plot(data['pwm'])
-    plt.legend()
-    plt.subplot(313)
-    plt.title('u')
-    plt.plot(np.squeeze(data['u']))
-    plt.legend()
-    plt.show()
+    if plot:
+        plt.figure()
+        plt.subplot(311)
+        plt.title('pos')
+        plt.plot(np.array(data['pos'])[:, :3], label='pos')
+        plt.plot(np.array(data['target'])[:, :3], linestyle='--', label='target')
+        plt.legend()
+        plt.subplot(312)
+        plt.title('pwm')
+        plt.plot(data['pwm'])
+        plt.legend()
+        plt.subplot(313)
+        plt.title('u')
+        plt.plot(np.squeeze(data['u']))
+        plt.legend()
+        plt.show()
 
 
-else:
-    plt.figure()
-    plt.subplot(311)
-    plt.title('pos')
-    plt.plot(np.array(data['pos'])[:, :3], label='pos')
-    plt.plot(np.array(data['target'])[:, :3], linestyle='--', label='target')
-    plt.legend()
-    plt.subplot(312)
-    plt.title('pwm')
-    plt.plot(data['pwm'])
-    plt.legend()
-    plt.subplot(313)
-    plt.title('u')
-    plt.plot(np.squeeze(data['u']))
-    plt.legend()
-    plt.show()
-
-
-    interface.disconnect()
+# else:
+#     if plot:
+#         plt.figure()
+#         plt.subplot(311)
+#         plt.title('pos')
+#         plt.plot(np.array(data['pos'])[:, :3], label='pos')
+#         plt.plot(np.array(data['target'])[:, :3], linestyle='--', label='target')
+#         plt.legend()
+#         plt.subplot(312)
+#         plt.title('pwm')
+#         plt.plot(data['pwm'])
+#         plt.legend()
+#         plt.subplot(313)
+#         plt.title('u')
+#         plt.plot(np.squeeze(data['u']))
+#         plt.legend()
+#         plt.show()
+#
+#
+#     interface.disconnect()

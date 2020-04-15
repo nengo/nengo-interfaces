@@ -9,6 +9,7 @@ class AirsimInterface():
     def connect(self):
         self.client = airsim.MultirotorClient()
         self.client.confirmConnection()
+        self.client.reset()
         self.client.enableApiControl(True)
         self.client.armDisarm(True)
         # not sure if we need this yet
