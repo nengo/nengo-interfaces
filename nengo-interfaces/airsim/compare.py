@@ -6,7 +6,7 @@ brent2 = np.load('brent2.npz')
 # noise removed from self.pos
 brent3 = np.load('brent3.npz')
 mine = np.load('mine.npz')
-datas = [brent, brent3, mine]
+datas = [brent3, mine]
 ls = ['-', '--', '-.']
 cols = ['r', '--g', 'b', '--k']
 
@@ -29,11 +29,13 @@ for jj, data in enumerate(datas):
     for ii, u in enumerate(u_track.T):
         a1[ii].set_title('u%i'%ii)
         a1[ii].plot(u,
-                # linestyle=ls[jj],
-                cols[jj])
+                linestyle=ls[jj],
+                # cols[jj]
+                )
     for ii, pos in enumerate(pos_track.T):
         a2[ii].set_title('pos%i'%ii)
         a2[ii].plot(pos,
-                # linestyle=ls[jj],
-                cols[jj])
+                linestyle=ls[jj],
+                # cols[jj]
+                )
 plt.show()

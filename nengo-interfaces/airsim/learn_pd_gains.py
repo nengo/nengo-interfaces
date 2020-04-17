@@ -1,6 +1,7 @@
+import subprocess
 import numpy as np
 import time
-# import nni
+import nni
 import ctypes
 import traceback
 import vrep
@@ -53,25 +54,69 @@ def gen_u_adapt(params, orientation):
     return gravity_w
 
 class vrepInterface():
-    def connect(self, cid=None):
+    def connect(self, cid=0, remoteAPIConnections_loc=None, gui=False):
+        if remoteAPIConnections_loc is None:
+            remoteAPIConnections_loc = '/home/pawel/Downloads/V-REP_PRO_V3_5_0_Linux/remoteApiConnections.txt'
+
         self.vrep_mode = vrep.simx_opmode_oneshot
         SYNC = True
+
         # setup vrep connection
-        if cid is None:
-            vrep.simxFinish(-1) # just in case, close all opened connections
-            self.cid = vrep.simxStart('127.0.0.1',19997,True,True,5000,5)
-        else:
-            self.cid = cid
+        # if cid is None:
+        # vrep.simxFinish(-1) # just in case, close all opened connections
+        # else:
+        # self.cid = cid
 
-        if self.cid != -1:
-            print ('Connected to V-REP remote API server, client id: %s' % self.cid)
-            vrep.simxStartSimulation( self.cid, vrep.simx_opmode_oneshot )
-            if SYNC:
-                vrep.simxSynchronous( self.cid, True )
-        else:
-            print ('Failed connecting to V-REP remote API server')
-            self.exit()
+        # open the remote connection file and change the port that vrep looks for
+        # conn_file = open(remoteAPIConnections_loc, 'r')
+        # new_file = ''
+        # for line in conn_file:
+        #     stripped_line = line.strip()
+        #     if 'portIndex1_port' in stripped_line:
+        #         stripped_line = 'portIndex1_port             = %i' % (19997 + cid)
+        #     new_file += stripped_line + '\n'
+        # conn_file.close()
+        #
+        # write_file = open(remoteAPIConnections_loc, 'w')
+        # write_file.write(new_file)
+        # write_file.close()
 
+        if gui:
+            command = [
+             '/home/pawel/Downloads/V-REP_PRO_V3_5_0_Linux/./vrep.sh',
+             ' /home/pawel/src/masters-thesis/quadcopter_experiments_simple.ttt']
+        else:
+            command = [
+             '/home/pawel/Downloads/V-REP_PRO_V3_5_0_Linux/./vrep.sh',
+             ' -h',
+             ' /home/pawel/src/masters-thesis/quadcopter_experiments_simple.ttt']
+
+        # open coppeliasim instance
+        self.vrep_instance = subprocess.Popen(
+                command)#,
+            # stdout=subprocess.PIPE)
+
+        if gui:
+            time.sleep(5)
+
+        self.cid = vrep.simxStart('127.0.0.1',19997+cid,True,True,5000,5)
+        # self.cid = vrep.simxStart('127.0.0.1',19997,True,True,5000,5)
+
+        if self.cid == -1:
+            raise Exception("Failed connecting to CoppeliaSim remote API server")
+
+        print ('Connected to V-REP remote API server, client id: %s' % self.cid)
+        # vrep.simxLoadScene(
+        #     self.cid,
+        #     '/home/pawel/src/masters-thesis/quadcopter_experiments_simple.ttt',
+        #     0,
+        #     self.vrep_mode
+        # )
+
+        if SYNC:
+            vrep.simxSynchronous( self.cid, True )
+
+        vrep.simxStartSimulation( self.cid, vrep.simx_opmode_oneshot )
 
         err, self.copter = vrep.simxGetObjectHandle(self.cid, "Quadricopter_base",
                                                 vrep.simx_opmode_oneshot_wait )
@@ -88,6 +133,7 @@ class vrepInterface():
 
     def disconnect(self):
         err = vrep.simxStopSimulation(self.cid, vrep.simx_opmode_oneshot_wait )
+        self.vrep_instance.kill()
         time.sleep(0.01) # Maybe this will prevent V-REP from crashing as often
 
     def get_feedback(self):
@@ -146,43 +192,74 @@ class vrepInterface():
           motor_values[i] = values[i]
         # print(motor_values)
         packedData=vrep.simxPackFloats(motor_values.flatten())
-        raw_bytes = (ctypes.c_ubyte * len(packedData)).from_buffer_copy(packedData) 
+        raw_bytes = (ctypes.c_ubyte * len(packedData)).from_buffer_copy(packedData)
         err = vrep.simxSetStringSignal(self.cid, "rotorTargetVelocities",
                                         raw_bytes,
                                         self.vrep_mode)
         vrep.simxSynchronousTrigger( self.cid )
 
-def fly_session():
+def fly_session(use_nni=True, plot=False):
     """
     phi == roll
     theta == pitch
     psi == yaw
     """
-    plot = False
-    step_limit = 10000
+    step_limit = 15000
     pos_track = []
+    target_track = []
     u_track = []
 
     interface = vrepInterface()
-    interface.connect()
+    n_attemps = 10
+    for ii in range(n_attemps):
+        try:
+            connected = True
+            if use_nni:
+                print('SEQUENCE ID: %i' % nni.get_sequence_id())
+                interface.connect(cid=nni.get_sequence_id())
+            else:
+                interface.connect(np.random.randint(1, 10))
+                # interface.connect(gui=True)
+        except: # ConnectionError:
+            connected = False
+            print('retrying connection...')
 
-    # params = nni.get_next_parameter()
-    # params = {
-    #             'k1': 0.43352026190263104,
-    #             'k2' : 2.0 *2,
-    #             'k3' : 0.5388202808181405,
-    #             'k4' : 1.65 * 2,
-    #             'k5' : 2.5995452450850185,
-    #             'k6' : 0.802872750102059 * 4,
-    #             'k7' : 0.5990281657438163,
-    #             'k8' : 2.8897310746350824 * 2
-    #         }
+        if connected:
+            break
+
+    # TODO fix this bug, need to send one feedback and one motor command before we can get feedback
+    interface.get_feedback()
+    interface.send_motor_commands(np.zeros(4))
+
+    if use_nni:
+        params = nni.get_next_parameter()
+    else:
+        # gravity comp
+        # params = {
+        #     'k7':3.5507965061299425,
+        #     'k5':5.8918387400151335,
+        #     'k4':9.984104311343183,
+        #     'k2':9.9975624442988,
+        #     'k3':8.351443088454126,
+        #     'k8':7.793104952437566,
+        #     'k1':7.13115856837296,
+        #     'k6':5.332358267734109
+        #  }
+        params = {
+        'k5':4.123516422497108,
+        'k1':2.4495316824399342,
+        'k6':5.628947290025429,
+        'k7':3.2333984852224065,
+        'k3':9.024561841578501,
+        'k2':5.34314868270615,
+        'k4':4.393081669969126,
+        'k8':3.9650105222558802}
 
     targets = [
-        {'target_pos': np.array([0, 0, 1]),
-         'target_lin_vel': np.array([0, 0, 0]),
-         'target_ori': np.array([0, 0, 0]),
-         'target_ang_vel': np.array([0, 0, 0])
+        {'target_pos': interface.get_feedback()['pos'], # + np.array([1, 1, 1]), #np.array([0, 0, 1]),
+        'target_lin_vel': np.array([0, 0, 0]),
+        'target_ori': np.array([0, 0, 0]),
+        'target_ang_vel': np.array([0, 0, 0])
         },
     ]
 
@@ -210,6 +287,25 @@ def fly_session():
 
     for target in targets:
         cnt = 0
+        target_state = np.array([
+                target['target_pos'][0],
+                target['target_pos'][1],
+                target['target_pos'][2],
+                target['target_ori'][0],
+                target['target_ori'][1],
+                target['target_ori'][2],
+                target['target_lin_vel'][0],
+                target['target_lin_vel'][1],
+                target['target_lin_vel'][2],
+                target['target_ang_vel'][0],
+                target['target_ang_vel'][1],
+                target['target_ang_vel'][2]
+            ])
+
+        test_accuracy = 0
+
+
+
         while cnt < step_limit:
 
             # brent only sent commands every 10 steps
@@ -268,40 +364,74 @@ def fly_session():
                 #                                     [5.6535],
                 #                                     [5.6535],
                 #                                     ])
+                gravity_compensation = np.array([[0.574], [0.571], [0.574], [0.571]])
+
                 # this should be sqrt but will lead to errors if force is negative
                 pd = np.dot(rotor_transform, np.dot(gains, error)) #+ gravity_compensation
 
                 interface.send_motor_commands(pd)
 
+                drone_state = np.array([
+                        feedback['pos'][0],
+                        feedback['pos'][1],
+                        feedback['pos'][2],
+                        feedback['ori'][0],
+                        feedback['ori'][1],
+                        feedback['ori'][2],
+                        feedback['lin_vel'][0],
+                        feedback['lin_vel'][1],
+                        feedback['lin_vel'][2],
+                        feedback['ang_vel'][0],
+                        feedback['ang_vel'][1],
+                        feedback['ang_vel'][2]
+                    ])
+
+                test_accuracy += np.linalg.norm(drone_state - target_state)
+
                 if plot:
-                    pos_track.append(feedback['pos'])
+                    # pos_track.append(feedback['pos'])
+                    pos_track.append(drone_state)
+                    target_track.append(target_state)
                     u_track.append(pd)
 
-                # if cnt % 100 == 0:
-                #     print('target: ', target['target_pos'])
-                #     print('pos: ', feedback['pos'])
+                if cnt % 500 == 0:
+                    print('target: ', target['target_pos'])
+                    print('pos: ', feedback['pos'])
 
             cnt += 1
 
         #TODO calculate error signal
         # test_accuracy =
 
-    # nni.report_final_results(test_accuracy)
+    if use_nni:
+        nni.report_final_result(test_accuracy)
 
     # disconnect from vrep
     interface.disconnect()
     if plot:
         u_track = np.squeeze(np.array(u_track))
         pos_track = np.squeeze(np.array(pos_track))
+        target_track = np.squeeze(np.array(target_track))
         plt.figure()
         for ii, u in enumerate(u_track.T):
             plt.subplot(4,1,ii+1)
-            plt.plot(u)
+            plt.plot(u, label='avg: %.3f' % np.mean(u))
+            plt.ylabel('u%i' % ii)
+            plt.legend()
+        plt.savefig('u_track')
         plt.show()
+        titles = ['x', 'y', 'z', 'a', 'b', 'g', 'dx', 'dy', 'dz', 'da', 'db', 'dg']
+        ylabs = ['pos', 'orientation', 'lin vel', 'ang vel']
         for ii, pos in enumerate(pos_track.T):
-            plt.subplot(3,1,ii+1)
-            plt.plot(pos)
+            plt.subplot(4, 3,ii+1)
+            plt.plot(pos, linestyle='--')
+            plt.plot(target_track.T[ii])
+            plt.title(titles[ii])
+            if ii % 3 == 0:
+                plt.ylabel(ylabs[int(ii/3)])
+        plt.tight_layout()
+        plt.savefig('state_track')
         plt.show()
         np.savez_compressed('mine.npz', pos=pos_track, u=u_track)
 
-fly_session()
+fly_session(use_nni=True, plot=False)

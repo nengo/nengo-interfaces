@@ -1,0 +1,28 @@
+authorName: p3jawors
+experimentName: Drone PD Gain Hyperparam Search
+# how many to run simultaneously
+trialConcurrency: 5
+maxExecDuration: 1h
+maxTrialNum: 100
+trainingServicePlatform: local
+# The path to Search Space
+searchSpacePath: search_space.json
+useAnnotation: false
+logDir: /home/pawel/src/nengo-interfaces/nengo-interfaces/airsim/data/nni
+tuner:
+  #choice: TPE, Random, Anneal, Evolution, BatchTuner, MetisTuner, GPTuner
+  #SMAC (SMAC should be installed through nnictl)
+  builtinTunerName: TPE
+  # includeIntermediateResults: true
+  # classArgs:
+  #   optimize_mode: maximize
+# The path and the running command of trial
+trial:
+  command: python /home/pawel/src/nengo-interfaces/nengo-interfaces/airsim/learn_pd_gains.py
+  codeDir: .
+# assessor:
+#   builtinAssessorName: Curvefitting
+#   classArgs:
+#     optimize_mode: maximize
+#     epoch_num: 10
+#     threshold: 0.9
