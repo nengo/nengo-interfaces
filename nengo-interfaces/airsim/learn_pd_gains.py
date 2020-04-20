@@ -1,4 +1,6 @@
 import subprocess
+import signal
+import os
 import numpy as np
 import time
 import nni
@@ -54,32 +56,31 @@ def gen_u_adapt(params, orientation):
     return gravity_w
 
 class vrepInterface():
-    def connect(self, cid=0, remoteAPIConnections_loc=None, gui=False):
-        if remoteAPIConnections_loc is None:
-            remoteAPIConnections_loc = '/home/pawel/Downloads/V-REP_PRO_V3_5_0_Linux/remoteApiConnections.txt'
+    def connect(self, cid=0, gui=False):
 
         self.vrep_mode = vrep.simx_opmode_oneshot
         SYNC = True
 
+        remoteAPIConnections_loc = '/home/pawel/Downloads/V-REP_PRO_V3_5_0_Linux/remoteApiConnections.txt'
         # setup vrep connection
+        # open the remote connection file and change the port that vrep looks for
+        conn_file = open(remoteAPIConnections_loc, 'r')
+        new_file = ''
+        for line in conn_file:
+            stripped_line = line.strip()
+            if 'portIndex1_port' in stripped_line:
+                stripped_line = 'portIndex1_port             = %i' % (19997 + cid)
+            new_file += stripped_line + '\n'
+        conn_file.close()
+
+        write_file = open(remoteAPIConnections_loc, 'w')
+        write_file.write(new_file)
+        write_file.close()
+
         # if cid is None:
         # vrep.simxFinish(-1) # just in case, close all opened connections
         # else:
         # self.cid = cid
-
-        # open the remote connection file and change the port that vrep looks for
-        # conn_file = open(remoteAPIConnections_loc, 'r')
-        # new_file = ''
-        # for line in conn_file:
-        #     stripped_line = line.strip()
-        #     if 'portIndex1_port' in stripped_line:
-        #         stripped_line = 'portIndex1_port             = %i' % (19997 + cid)
-        #     new_file += stripped_line + '\n'
-        # conn_file.close()
-        #
-        # write_file = open(remoteAPIConnections_loc, 'w')
-        # write_file.write(new_file)
-        # write_file.close()
 
         if gui:
             command = [
@@ -87,16 +88,20 @@ class vrepInterface():
              ' /home/pawel/src/masters-thesis/quadcopter_experiments_simple.ttt']
         else:
             command = [
+             'uxterm',
+             '-e',
              '/home/pawel/Downloads/V-REP_PRO_V3_5_0_Linux/./vrep.sh',
              ' -h',
              ' /home/pawel/src/masters-thesis/quadcopter_experiments_simple.ttt']
 
         # open coppeliasim instance
         self.vrep_instance = subprocess.Popen(
-                command)#,
-            # stdout=subprocess.PIPE)
+                command,
+            stdout=subprocess.PIPE)
 
         if gui:
+            time.sleep(5)
+        else:
             time.sleep(5)
 
         self.cid = vrep.simxStart('127.0.0.1',19997+cid,True,True,5000,5)
@@ -132,8 +137,15 @@ class vrepInterface():
                                         self.vrep_mode)
 
     def disconnect(self):
+        # end simulation
         err = vrep.simxStopSimulation(self.cid, vrep.simx_opmode_oneshot_wait )
-        self.vrep_instance.kill()
+        # end communication thread
+        vrep.simxFinish(self.cid)
+        # NOTE:this doesn't seem to do anything
+        # kill bash instance
+        # self.vrep_instance.kill()
+        # sys.exit(0)
+        os.kill(self.vrep_instance.pid, signal.SIGTERM)
         time.sleep(0.01) # Maybe this will prevent V-REP from crashing as often
 
     def get_feedback(self):
@@ -198,34 +210,40 @@ class vrepInterface():
                                         self.vrep_mode)
         vrep.simxSynchronousTrigger( self.cid )
 
-def fly_session(use_nni=True, plot=False):
+def fly_session(use_nni=True, plot=False, step_limit=1000, gui=False):
     """
     phi == roll
     theta == pitch
     psi == yaw
     """
-    step_limit = 15000
     pos_track = []
     target_track = []
     u_track = []
 
     interface = vrepInterface()
-    n_attemps = 10
-    for ii in range(n_attemps):
-        try:
-            connected = True
-            if use_nni:
-                print('SEQUENCE ID: %i' % nni.get_sequence_id())
-                interface.connect(cid=nni.get_sequence_id())
-            else:
-                interface.connect(np.random.randint(1, 10))
-                # interface.connect(gui=True)
-        except: # ConnectionError:
-            connected = False
-            print('retrying connection...')
 
-        if connected:
-            break
+    if use_nni:
+        print('SEQUENCE ID: %i' % nni.get_sequence_id())
+        interface.connect(cid=nni.get_sequence_id(), gui=gui)
+    else:
+        interface.connect(cid=np.random.randint(1, 10), gui=gui)
+
+    # n_attemps = 10
+    # for ii in range(n_attemps):
+    #     try:
+    #         connected = True
+    #         if use_nni:
+    #             print('SEQUENCE ID: %i' % nni.get_sequence_id())
+    #             interface.connect(cid=nni.get_sequence_id())
+    #         else:
+    #             interface.connect(cid=np.random.randint(1, 10))
+    #             # interface.connect(gui=True)
+    #     except: # ConnectionError:
+    #         connected = False
+    #         print('retrying connection...')
+    #
+    #     if connected:
+    #         break
 
     # TODO fix this bug, need to send one feedback and one motor command before we can get feedback
     interface.get_feedback()
@@ -304,99 +322,97 @@ def fly_session(use_nni=True, plot=False):
 
         test_accuracy = 0
 
-
-
         while cnt < step_limit:
 
             # brent only sent commands every 10 steps
-            if cnt % 10 == 0:
-                # get feedback
-                feedback = interface.get_feedback()
+            # if cnt % 10 == 0:
+            # get feedback
+            feedback = interface.get_feedback()
 
-                # Find the error
-                ori_err = [target['target_ori'][0] - feedback['ori'][0],
-                                target['target_ori'][1] - feedback['ori'][1],
-                                target['target_ori'][2] - feedback['ori'][2]]
-                cz = math.cos(feedback['ori'][2])
-                sz = math.sin(feedback['ori'][2])
-                x_err = target['target_pos'][0] - feedback['pos'][0]
-                y_err = target['target_pos'][1] - feedback['pos'][1]
-                pos_err = [ x_err * cz + y_err * sz,
-                                -x_err * sz + y_err * cz,
-                                target['target_pos'][2] - feedback['pos'][2]]
+            # Find the error
+            ori_err = [target['target_ori'][0] - feedback['ori'][0],
+                            target['target_ori'][1] - feedback['ori'][1],
+                            target['target_ori'][2] - feedback['ori'][2]]
+            cz = math.cos(feedback['ori'][2])
+            sz = math.sin(feedback['ori'][2])
+            x_err = target['target_pos'][0] - feedback['pos'][0]
+            y_err = target['target_pos'][1] - feedback['pos'][1]
+            pos_err = [ x_err * cz + y_err * sz,
+                            -x_err * sz + y_err * cz,
+                            target['target_pos'][2] - feedback['pos'][2]]
 
-                lin_vel = [
-                        feedback['lin_vel'][0]*cz+feedback['lin_vel'][1]*sz,
-                        -feedback['lin_vel'][0]*sz+feedback['lin_vel'][1]*cz,
-                        feedback['lin_vel'][2]]
+            lin_vel = [
+                    feedback['lin_vel'][0]*cz+feedback['lin_vel'][1]*sz,
+                    -feedback['lin_vel'][0]*sz+feedback['lin_vel'][1]*cz,
+                    feedback['lin_vel'][2]]
 
-                ang_vel = [
-                        feedback['ang_vel'][0]*cz+feedback['ang_vel'][1]*sz,
-                        -feedback['ang_vel'][0]*sz+feedback['ang_vel'][1]*cz,
-                        feedback['ang_vel'][2]]
+            ang_vel = [
+                    feedback['ang_vel'][0]*cz+feedback['ang_vel'][1]*sz,
+                    -feedback['ang_vel'][0]*sz+feedback['ang_vel'][1]*cz,
+                    feedback['ang_vel'][2]]
 
-                for ii in range(3):
-                    if ori_err[ii] > math.pi:
-                        ori_err[ii] -= 2 * math.pi
-                    elif ori_err[ii] < -math.pi:
-                        ori_err[ii] += 2 * math.pi
+            for ii in range(3):
+                if ori_err[ii] > math.pi:
+                    ori_err[ii] -= 2 * math.pi
+                elif ori_err[ii] < -math.pi:
+                    ori_err[ii] += 2 * math.pi
 
-                error = np.array([
-                    [pos_err[0]],
-                    [pos_err[1]],
-                    [pos_err[2]],
-                    [lin_vel[0]],
-                    [lin_vel[1]],
-                    [lin_vel[2]],
-                    [ori_err[0]],
-                    [ori_err[1]],
-                    [ori_err[2]],
-                    [ang_vel[0]],
-                    [ang_vel[1]],
-                    [ang_vel[2]],
+            error = np.array([
+                [pos_err[0]],
+                [pos_err[1]],
+                [pos_err[2]],
+                [lin_vel[0]],
+                [lin_vel[1]],
+                [lin_vel[2]],
+                [ori_err[0]],
+                [ori_err[1]],
+                [ori_err[2]],
+                [ang_vel[0]],
+                [ang_vel[1]],
+                [ang_vel[2]],
+            ])
+
+            # calculate pd signal
+            # pd = np.sqrt(np.dot(rotor_transform, np.dot(gains, error)))
+
+            # gravity_compensation = np.matrix([[5.6535],
+            #                                     [5.6535],
+            #                                     [5.6535],
+            #                                     [5.6535],
+            #                                     ])
+            gravity_compensation = np.array([[0.574], [0.571], [0.574], [0.571]])
+
+            # this should be sqrt but will lead to errors if force is negative
+            pd = np.dot(rotor_transform, np.dot(gains, error)) #+ gravity_compensation
+
+            interface.send_motor_commands(pd)
+
+            drone_state = np.array([
+                    feedback['pos'][0],
+                    feedback['pos'][1],
+                    feedback['pos'][2],
+                    feedback['ori'][0],
+                    feedback['ori'][1],
+                    feedback['ori'][2],
+                    feedback['lin_vel'][0],
+                    feedback['lin_vel'][1],
+                    feedback['lin_vel'][2],
+                    feedback['ang_vel'][0],
+                    feedback['ang_vel'][1],
+                    feedback['ang_vel'][2]
                 ])
 
-                # calculate pd signal
-                # pd = np.sqrt(np.dot(rotor_transform, np.dot(gains, error)))
+            test_accuracy += np.linalg.norm(drone_state - target_state)
 
-                # gravity_compensation = np.matrix([[5.6535],
-                #                                     [5.6535],
-                #                                     [5.6535],
-                #                                     [5.6535],
-                #                                     ])
-                gravity_compensation = np.array([[0.574], [0.571], [0.574], [0.571]])
+            if plot:
+                # pos_track.append(feedback['pos'])
+                pos_track.append(drone_state)
+                target_track.append(target_state)
+                u_track.append(pd)
 
-                # this should be sqrt but will lead to errors if force is negative
-                pd = np.dot(rotor_transform, np.dot(gains, error)) #+ gravity_compensation
-
-                interface.send_motor_commands(pd)
-
-                drone_state = np.array([
-                        feedback['pos'][0],
-                        feedback['pos'][1],
-                        feedback['pos'][2],
-                        feedback['ori'][0],
-                        feedback['ori'][1],
-                        feedback['ori'][2],
-                        feedback['lin_vel'][0],
-                        feedback['lin_vel'][1],
-                        feedback['lin_vel'][2],
-                        feedback['ang_vel'][0],
-                        feedback['ang_vel'][1],
-                        feedback['ang_vel'][2]
-                    ])
-
-                test_accuracy += np.linalg.norm(drone_state - target_state)
-
-                if plot:
-                    # pos_track.append(feedback['pos'])
-                    pos_track.append(drone_state)
-                    target_track.append(target_state)
-                    u_track.append(pd)
-
-                if cnt % 500 == 0:
-                    print('target: ', target['target_pos'])
-                    print('pos: ', feedback['pos'])
+            if cnt % 500 == 0:
+                print('target: ', target['target_pos'])
+                print('pos: ', feedback['pos'])
 
             cnt += 1
 
@@ -434,4 +450,4 @@ def fly_session(use_nni=True, plot=False):
         plt.show()
         np.savez_compressed('mine.npz', pos=pos_track, u=u_track)
 
-fly_session(use_nni=True, plot=False)
+fly_session(use_nni=True, plot=False, step_limit=1000, gui=False)
