@@ -96,8 +96,6 @@ class AirSim(nengo.Process):
             self.client.simGetGroundTruthEnvironment().air_density / air_density
         )
 
-        self.connect(takeoff=takeoff)
-
         # size_in = the number of rotors on our quadcopter, hardcoded
         size_in = 4
         # size_out = number of parameters in our feedback array, which is of the form
@@ -107,8 +105,6 @@ class AirSim(nengo.Process):
 
     def connect(self, takeoff=False):
 
-        # NOTE ???
-        # getting message in AirSim 'API not received, entering hover mode for safety'
         self.client.confirmConnection()
         self.client.reset()
         self.client.enableApiControl(True)
@@ -166,7 +162,8 @@ class AirSim(nengo.Process):
             if self.track_input:
                 self.input_track.append(np.copy(u))
 
-            self._send_pwm_signal(u)
+            print('u: ', [float('%.3f' % val) for val in u])
+            self.send_pwm_signal(u)
             feedback = self.get_feedback()
 
             # render camera feedback
@@ -216,6 +213,8 @@ class AirSim(nengo.Process):
         if self.run_async:
             self.client.moveByMotorPWMsAsync(pwm[0], pwm[1], pwm[2], pwm[3], self.dt)
         else:
+            print('pwm: ', pwm)
+            print('dt: ', self.dt)
             self.client.moveByMotorPWMsAsync(
                 pwm[0], pwm[1], pwm[2], pwm[3], self.dt
             ).join()
