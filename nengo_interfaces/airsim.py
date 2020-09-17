@@ -61,6 +61,7 @@ class AirSim(nengo.Process):
         self.track_input = track_input
         self.input_bias = input_bias
         self.input_scale = input_scale
+        self.takeoff = takeoff
 
         self.input_track = []
         self.euler_order = "rxyz"
@@ -103,7 +104,7 @@ class AirSim(nengo.Process):
         size_out = 12
         super().__init__(size_in, size_out, default_dt=dt, seed=seed)
 
-    def connect(self, takeoff=False):
+    def connect(self):
 
         self.client.confirmConnection()
         self.client.reset()
@@ -111,7 +112,7 @@ class AirSim(nengo.Process):
         self.client.armDisarm(True)
         # https://microsoft.github.io/AirSim/apis/#async-methods-duration-and-max_wait_seconds
         # NOTE appending .join() will make the call synchronous (wait for completion)
-        if takeoff:
+        if self.takeoff:
             # takeoff to 3m above the ground
             if self.run_async:
                 self.client.takeoffAsync()
@@ -143,8 +144,9 @@ class AirSim(nengo.Process):
             self.client.simPause(sim_pause)
 
     def make_step(self, shape_in, shape_out, dt, rng, state):
-        """ Create the function for the Airsim interfacing Nengo Node.
-        """
+        """Create the function for the Airsim interfacing Nengo Node."""
+
+        self.connect()
 
         def step(t, u):
             """Takes in PWM commands for 4 motors. Returns the state of the drone
@@ -162,7 +164,7 @@ class AirSim(nengo.Process):
             if self.track_input:
                 self.input_track.append(np.copy(u))
 
-            print('u: ', [float('%.3f' % val) for val in u])
+            print("u: ", [float("%.3f" % val) for val in u])
             self.send_pwm_signal(u)
             feedback = self.get_feedback()
 
@@ -180,16 +182,6 @@ class AirSim(nengo.Process):
             )
 
         return step
-
-    def make_node(self):
-        """Create a Node that wraps the AirSimProcess simulation.
-        """
-        return nengo.Node(
-            self,
-            size_in=self.default_size_in,
-            size_out=self.default_size_out,
-            label="AirSim",
-        )
 
     def send_pwm_signal(self, u):
         """
@@ -213,8 +205,8 @@ class AirSim(nengo.Process):
         if self.run_async:
             self.client.moveByMotorPWMsAsync(pwm[0], pwm[1], pwm[2], pwm[3], self.dt)
         else:
-            print('pwm: ', pwm)
-            print('dt: ', self.dt)
+            print("pwm: ", pwm)
+            print("dt: ", self.dt)
             self.client.moveByMotorPWMsAsync(
                 pwm[0], pwm[1], pwm[2], pwm[3], self.dt
             ).join()

@@ -4,11 +4,12 @@ import nengo
 airsim = AirSim()
 
 with nengo.Network() as net:
-    input = nengo.Node([1000]*4)
-    anode = airsim.make_node()
+    input = nengo.Node([1000] * 4)
+    anode = nengo.Node(airsim, label="AirSim")
     nengo.Connection(input, anode)
 
 with nengo.Simulator(net) as sim:
-    sim.run(.1)
+    sim.run(0.1)
 
-airsim._disconnect()
+# Eventually we should be able to do this automatically (but not yet)
+airsim.disconnect()
