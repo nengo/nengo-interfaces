@@ -5,6 +5,7 @@ import numpy as np
 from abr_control.utils import transformations as transform
 import airsim
 from airsim.types import Pose, Vector3r, Quaternionr
+import math
 import nengo
 
 # https://github.com/microsoft/AirSim/blob/b7a65bb7f7a9471a2ec0ce6f573512b880d3197a/PythonClient/airsim/client.py#L679
@@ -49,21 +50,21 @@ class AirSim(nengo.Process):
         dt=0.01,
         run_async=False,
         render_params=None,
-        track_input=False,
+        # track_input=False,
         input_bias=0,
         input_scale=1,
         seed=None,
-        takeoff=True,
+        takeoff=False
     ):
         self.dt = dt
         self.run_async = run_async
         self.render_params = render_params if render_params is not None else {}
-        self.track_input = track_input
+        # self.track_input = track_input
         self.input_bias = input_bias
         self.input_scale = input_scale
         self.takeoff = takeoff
 
-        self.input_track = []
+        # self.input_track = []
         self.euler_order = "rxyz"
         self.Vector3r = airsim.Vector3r
 
@@ -120,6 +121,10 @@ class AirSim(nengo.Process):
                 self.client.takeoffAsync().join()
         self.is_paused = False
         self.client.simPause(self.is_paused)
+        # initialize wind and payload to zero
+        zeros = self.Vector3r(0, 0, 0)
+        self.client.simSetWind(zeros)
+        self.client.simSetExtForce(zeros)
 
     def disconnect(self):
 
@@ -127,9 +132,9 @@ class AirSim(nengo.Process):
         self.client.simSetExtForce(ext_force)
         self.client.simSetWind(ext_force)
 
+        self.client.reset()
         self.client.enableApiControl(False)
         self.client.armDisarm(False)
-        self.client.reset()
 
     def pause(self, sim_pause=True):
         """
@@ -148,7 +153,7 @@ class AirSim(nengo.Process):
 
         self.connect()
 
-        def step(t, u):
+        def step(t, x):
             """Takes in PWM commands for 4 motors. Returns the state of the drone
             after running the command.
 
@@ -157,14 +162,12 @@ class AirSim(nengo.Process):
             u : float
                 The control signal to send to AirSim simulation
             """
-            # bias and scale the input signala
+            # bias and scale the input signals
+            u = x
             u += self.input_bias
             u *= self.input_scale
 
-            if self.track_input:
-                self.input_track.append(np.copy(u))
-
-            print("u: ", [float("%.3f" % val) for val in u])
+            # print("u: ", [float("%.3f" % val) for val in u])
             self.send_pwm_signal(u)
             feedback = self.get_feedback()
 
@@ -205,60 +208,11 @@ class AirSim(nengo.Process):
         if self.run_async:
             self.client.moveByMotorPWMsAsync(pwm[0], pwm[1], pwm[2], pwm[3], self.dt)
         else:
-            print("pwm: ", pwm)
-            print("dt: ", self.dt)
+            # print("pwm: ", pwm)
+            # print("dt: ", self.dt)
             self.client.moveByMotorPWMsAsync(
                 pwm[0], pwm[1], pwm[2], pwm[3], self.dt
             ).join()
-
-    def _convert_to_airsim_quat(self, euler, rotate=False):
-        """
-        if rotate is false the nwe just convert our euler to quat and reorder to xyzw
-        """
-        quat = transform.quaternion_from_euler(
-            euler[0], euler[1], euler[2], self.euler_order
-        )
-
-        # rotate targets to match airsim state, this should be false for set_state
-        if rotate:
-            # rotate by y to add airsim's weird rotation
-            ang = np.pi / 2
-            rot_matrix = np.array(
-                [
-                    [np.cos(ang), 0, np.sin(ang)],
-                    [0, 1, 0],
-                    [-np.sin(ang), 0, np.cos(ang)],
-                ]
-            )
-
-            # quaternion to rotate airsim feedback
-            quat_rotation = transform.quaternion_from_matrix(rot_matrix)
-
-            # rotate our target quat by yaw to get our rotation of our drone
-            quat = transform.quaternion_multiply(quat, quat_rotation)
-
-        final_quat = [float(quat[1]), float(quat[2]), float(quat[3]), float(quat[0])]
-        return final_quat
-
-    def _convert_from_airsim_quat(self, airsim_quat):
-        # airsim has quaternion order xyzw, reorder to match our math to wxyz
-        quat = np.array(
-            [airsim_quat[3], airsim_quat[0], airsim_quat[1], airsim_quat[2]]
-        )
-
-        # airsim rotate by y for some reason, fix this
-        # get our current orientation as a quaternion
-        ang = np.pi / 2
-        rot_matrix = np.array(
-            [[np.cos(ang), 0, np.sin(ang)], [0, 1, 0], [-np.sin(ang), 0, np.cos(ang)]]
-        )
-
-        # quaternion to rotate airsim feedback
-        quat_rotation = transform.quaternion_from_matrix(rot_matrix)
-
-        # rotate our target quat by yaw to get our rotation of our drone
-        final_quat = transform.quaternion_multiply(quat, quat_rotation)
-        return final_quat
 
     def get_feedback(self):
         """
@@ -266,7 +220,7 @@ class AirSim(nengo.Process):
         parsed from the airsim custom type to a dict
 
         returns dict of state in the form:
-            [x, y, z, dx, dy, dz, roll, pitch, yaw, droll, dpitch, dyaw]
+            {position, quaternion(in format w,x,y,z), taitbryan(euler in taitbryan angles)}
 
         the full state can be accessed from self.state with the main keys:
             - landed_state
@@ -303,6 +257,8 @@ class AirSim(nengo.Process):
 
     def get_state(self, name):
         """Get the state of an object, return 3D position and orientation
+            return quaternion in order [w, x, y, z] and euler angles in
+            taitbryan format
 
         Parameters
         ----------
@@ -311,7 +267,10 @@ class AirSim(nengo.Process):
         """
         state = self.client.simGetObjectPose(name)
         pos = state.position.to_numpy_array()
-        quat = self._convert_from_airsim_quat(state.orientation.to_numpy_array())
+        airsim_quat = state.orientation.to_numpy_array()
+        quat = np.array(
+            [airsim_quat[3], airsim_quat[0], airsim_quat[1], airsim_quat[2]]
+        )
 
         return {
             "position": pos,
@@ -321,6 +280,8 @@ class AirSim(nengo.Process):
 
     def set_state(self, name, xyz=None, orientation=None):
         """Set the state of object given 3D location and quaternion
+            Accepts state position in meters and orientation in euler
+            angles in order set by euler_order in the __init__
 
         Parameters
         ----------
@@ -329,17 +290,24 @@ class AirSim(nengo.Process):
         xyz: 3d array or list, optional (Default: None)
             the desired xyz position in meters
             if you do not want to set the position, set to None
-        # quaternion : 4d array or list, optional (Default: None)
-        #     the desired quaternion orientation of the object in order [w, x, y, z]
-        #     if you do not want to set the orientation, set to None
+        orientation: 3d array or list, optional (Default: None)
+            the desired orientation as euler angles in the format set by
+            self.euler_order in the __init__
         """
         xyz = [float(xyz[0]), float(xyz[1]), float(xyz[2])]
-        quat = self._convert_to_airsim_quat(orientation, rotate=False)
+
+        orientation = transform.quaternion_from_euler(orientation[0], orientation[1], orientation[2], self.euler_order)
+
+        # reorder to xyzw to match the quaternion format of airsim
+        quat = [float(orientation[1]), float(orientation[2]), float(orientation[3]), float(orientation[0])]
         pose = Pose(
-            position_val=Vector3r(x_val=xyz[0], y_val=xyz[1], z_val=xyz[2]),
-            orientation_val=Quaternionr(
-                x_val=quat[0], y_val=quat[1], z_val=quat[2], w_val=quat[3]
-            ),
+                position_val=Vector3r(
+                    x_val=xyz[0], y_val=xyz[1], z_val=xyz[2]
+                ),
+                orientation_val=Quaternionr(
+                    x_val=quat[0], y_val=quat[1], z_val=quat[2], w_val=quat[3]
+                )
+
         )
         self.client.simSetObjectPose(name, pose, teleport=True)
 
@@ -347,22 +315,27 @@ class AirSim(nengo.Process):
         """Convert quaternion to Tait-Bryan Euler angles
 
         quat : np.array
-            The quaternion in [w, x, y, z] format, to match AirSim's output format
+            The quaternion in [w, x, y, z] format
         """
-        return np.array(
-            [
-                np.arctan2(
-                    quat[2] * quat[3] + quat[0] * quat[1],
-                    1 / 2 - (quat[1] ** 2 + quat[2] ** 2),
-                ),
-                np.arcsin(-2 * (quat[1] * quat[3] - quat[0] * quat[2])),
-                np.arctan2(
-                    quat[1] * quat[2] + quat[0] * quat[3],
-                    1 / 2 - (quat[2] ** 2 + quat[3] ** 2),
-                ),
-            ]
-        )
+        euler = np.asarray(transform.euler_from_quaternion(quat, self.euler_order))
+        euler = self.ea_xyz_to_zxy(euler)
 
+        return euler
+
+        # return np.array(
+        #     [
+        #         np.arctan2(
+        #             quat[2] * quat[3] + quat[0] * quat[1],
+        #             1 / 2 - (quat[1] ** 2 + quat[2] ** 2),
+        #         ),
+        #         np.arcsin(-2 * (quat[1] * quat[3] - quat[0] * quat[2])),
+        #         np.arctan2(
+        #             quat[1] * quat[2] + quat[0] * quat[3],
+        #             1 / 2 - (quat[2] ** 2 + quat[3] ** 2),
+        #         ),
+        #     ]
+        # )
+        #
     def ea_xyz_to_zxy(self, ang):
         """ Converts Euler angles from x-y-z to z-x-y convention """
 
@@ -380,17 +353,17 @@ class AirSim(nengo.Process):
         c2 = np.cos(ang[1])
         c3 = np.cos(ang[2])
 
-        pitch = np.asin(b(c1 * c3 * s2 - s1 * s3))
+        pitch = math.asin(b(c1 * c3 * s2 - s1 * s3))
         cp = np.cos(pitch)
         if cp == 0:
             cp = 1e-6
 
-        yaw = np.asin(b((c1 * s3 + c3 * s1 * s2) / cp))  # flipped
+        yaw = math.asin(b((c1 * s3 + c3 * s1 * s2) / cp))  # flipped
         # Fix for getting the quadrants right
         if c3 < 0 and yaw > 0:
             yaw = np.pi - yaw
         elif c3 < 0 and yaw < 0:
             yaw = -np.pi - yaw
 
-        roll = np.asin(b((c3 * s1 + c1 * s2 * s3) / cp))  # flipped
+        roll = math.asin(b((c3 * s1 + c1 * s2 * s3) / cp))  # flipped
         return [roll, pitch, yaw]

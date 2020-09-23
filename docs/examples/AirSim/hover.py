@@ -2,6 +2,7 @@ from nengo_interfaces.airsim import AirSim
 import nengo
 
 airsim = AirSim()
+airsim.connect()
 
 with nengo.Network() as net:
     input = nengo.Node([1000] * 4)
