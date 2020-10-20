@@ -1,6 +1,7 @@
 import pprint
 import ast
 import numpy as np
+import time
 
 from abr_control.utils import transformations as transform
 import airsim
@@ -208,11 +209,14 @@ class AirSim(nengo.Process):
         if self.run_async:
             self.client.moveByMotorPWMsAsync(pwm[0], pwm[1], pwm[2], pwm[3], self.dt)
         else:
+            self.client.simPause(False)
             # print("pwm: ", pwm)
             # print("dt: ", self.dt)
             self.client.moveByMotorPWMsAsync(
                 pwm[0], pwm[1], pwm[2], pwm[3], self.dt
             ).join()
+            time.sleep(self.dt)
+            self.client.simPause(True)
 
     def get_feedback(self):
         """
