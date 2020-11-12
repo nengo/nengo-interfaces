@@ -58,6 +58,10 @@ class AirSim(nengo.Process):
         takeoff=False
     ):
         self.dt = dt
+        # empirically determined function from recorded velocity feedback from various dt
+        self.vel_scale = 1/(30.55 * self.dt + 0.03)
+        # self.vel_scale = 2
+
         self.run_async = run_async
         self.render_params = render_params if render_params is not None else {}
         # self.track_input = track_input
@@ -107,7 +111,6 @@ class AirSim(nengo.Process):
         super().__init__(size_in, size_out, default_dt=dt, seed=seed)
 
     def connect(self):
-
         self.client.confirmConnection()
         self.client.reset()
         self.client.enableApiControl(True)
@@ -120,7 +123,8 @@ class AirSim(nengo.Process):
                 self.client.takeoffAsync()
             else:
                 self.client.takeoffAsync().join()
-        self.is_paused = False
+        # self.is_paused = False
+        self.is_paused = True
         self.client.simPause(self.is_paused)
         # initialize wind and payload to zero
         zeros = self.Vector3r(0, 0, 0)
@@ -129,6 +133,7 @@ class AirSim(nengo.Process):
 
     def disconnect(self):
 
+        self.client.simPause(False)
         ext_force = self.Vector3r(0.0, 0.0, 0.0)
         # self.client.simSetExtForce(ext_force)
         self.client.simSetWind(ext_force)
@@ -136,6 +141,7 @@ class AirSim(nengo.Process):
         self.client.reset()
         self.client.enableApiControl(False)
         self.client.armDisarm(False)
+        self.client.simPause(True)
 
     def pause(self, sim_pause=True):
         """
@@ -245,8 +251,8 @@ class AirSim(nengo.Process):
             [airsim_quat[3], airsim_quat[0], airsim_quat[1], airsim_quat[2]]
         )
 
-        lin_vel = 2 * state.linear_velocity.to_numpy_array()
-        ang_vel = 2 * state.angular_velocity.to_numpy_array()
+        lin_vel = self.vel_scale * state.linear_velocity.to_numpy_array()
+        ang_vel = self.vel_scale * state.angular_velocity.to_numpy_array()
 
         return {
             "position": pos,
