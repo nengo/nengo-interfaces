@@ -1,9 +1,11 @@
 # Compares the feedback when using the nengo node vs interface directly
-import numpy as np
-import nengo
-import matplotlib.pyplot as plt
-from nengo_interfaces.airsim import AirSim
 import time
+
+import matplotlib.pyplot as plt
+import nengo
+import numpy as np
+
+from nengo_interfaces.airsim import AirSim
 
 dt = 0.01
 sim_time = 3

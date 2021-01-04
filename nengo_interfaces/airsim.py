@@ -1,12 +1,12 @@
 import math
 import time
 
-import numpy as np
-
-from abr_control.utils import transformations as transform
-import airsim
-from airsim.types import Pose, Vector3r, Quaternionr
 import nengo
+import numpy as np
+from abr_control.utils import transformations as transform
+
+import airsim
+from airsim.types import Pose, Quaternionr, Vector3r
 
 # https://github.com/microsoft/AirSim/blob/b7a65bb7f7a9471a2ec0ce6f573512b880d3197a/PythonClient/airsim/client.py#L679
 

@@ -1,7 +1,9 @@
 # runs a simplified path planner and pd controller to test the motor control portion of the interface
-import nengo
 import math
+
+import nengo
 import numpy as np
+
 from nengo_interfaces.airsim import AirSim
 
 

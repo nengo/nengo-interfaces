@@ -1,12 +1,10 @@
 from xml.etree import ElementTree
 
-import matplotlib.pyplot as plt
-import numpy as np
-
-import nengo
-
 import glfw
+import matplotlib.pyplot as plt
 import mujoco_py as mjp
+import nengo
+import numpy as np
 from mujoco_py.generated import const
 
 
