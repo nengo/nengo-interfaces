@@ -2,6 +2,7 @@ import pprint
 import ast
 import numpy as np
 import time
+import os
 
 from abr_control.utils import transformations as transform
 import airsim
@@ -28,7 +29,7 @@ class AirSim(nengo.Process):
     run_async : boolean, optional (Default: False)
         If true, run AirSim simulation independent of Nengo simulation. If false,
         run the two in lockstep, i.e., one Nengo time step then one AirSim time step
-    render_params : dict, optional (Default: None)
+    camera_params : dict, optional (Default: None)
         'cameras' : list
         'resolution' : list
         'update_frequency' : int, optional (Default: 1)
@@ -50,7 +51,7 @@ class AirSim(nengo.Process):
         self,
         dt=0.01,
         run_async=False,
-        render_params=None,
+        camera_params=None,
         # track_input=False,
         input_bias=0,
         input_scale=1,
@@ -63,7 +64,7 @@ class AirSim(nengo.Process):
         # self.vel_scale = 2
 
         self.run_async = run_async
-        self.render_params = render_params if render_params is not None else {}
+        self.camera_params = camera_params if camera_params is not None else {}
         # self.track_input = track_input
         self.input_bias = input_bias
         self.input_scale = input_scale
@@ -73,23 +74,29 @@ class AirSim(nengo.Process):
         self.euler_order = "rxyz"
         self.Vector3r = airsim.Vector3r
 
-        self.image = np.array([])
-        # if self.render_params:
-        #     # if not empty, create array for storing rendered camera feedback
-        #     self.camera_feedback = np.zeros(
-        #         (
-        #             self.render_params["resolution"][0],
-        #             self.render_params["resolution"][1]
-        #             * len(self.render_params["cameras"]),
-        #             3,
-        #         )
-        #     )
-        #     self.subpixels = np.product(self.camera_feedback.shape)
-        #     self.image = np.zeros(self.subpixels)
-        #     if "frequency" not in self.render_params.keys():
-        #         self.render_params["frequency"] = 1
-        #     if "plot_frequency" not in self.render_params.keys():
-        #         self.render_params["plot_frequency"] = None
+        if self.camera_params:
+            max_fps = np.round(1/self.dt, 4)
+            assert self.camera_params['fps'] <= max_fps, (
+                'With a dt of %.3f sec your maximum camera fps is %.2f' % (
+                    self.dt, 1/self.dt)
+                )
+            self.fps_remainder = (1/camera_params['fps']) - int(1/camera_params['fps'])
+            self.fps_count = 0
+
+            frame_rate_locked = False
+            available_frame_rates = []
+            fps_multiple = 1
+            while max_fps >= self.camera_params['fps']:
+                available_frame_rates.append(max_fps)
+
+                if max_fps == self.camera_params['fps']:
+                    frame_rate_locked = True
+                    break
+                else:
+                    fps_multiple += 1
+                    max_fps = np.round(1/(self.dt*fps_multiple), 4)
+            if not frame_rate_locked:
+                raise ValueError ('Please select an fps with a time/image that is a multiple of your timestep:', available_frame_rates)
 
         self.client = airsim.MultirotorClient()
 
@@ -110,7 +117,7 @@ class AirSim(nengo.Process):
         size_out = 12
         super().__init__(size_in, size_out, default_dt=dt, seed=seed)
 
-    def connect(self):
+    def connect(self, pause=True):
         self.client.confirmConnection()
         self.client.reset()
         self.client.enableApiControl(True)
@@ -124,7 +131,7 @@ class AirSim(nengo.Process):
             else:
                 self.client.takeoffAsync().join()
         # self.is_paused = False
-        self.is_paused = True
+        self.is_paused = pause
         self.client.simPause(self.is_paused)
         # initialize wind and payload to zero
         zeros = self.Vector3r(0, 0, 0)
@@ -179,8 +186,12 @@ class AirSim(nengo.Process):
             feedback = self.get_feedback()
 
             # render camera feedback
-            if self.render_params:
-                raise NotImplementedError
+            if self.camera_params:
+                # subtract dt because we start at dt, not zero, but we want an image on the first step, before the drone starts moving
+                if (int(1000*np.round(t-self.dt, 4))) % int(1000*np.round(1/self.camera_params['fps'], 4)) < 1e-5:
+                    self.fps_count += 1
+                    # scale to seconds and use integers to minimize rounding issues with floats
+                    self.get_camera_feedback(camera_name=self.camera_params['camera_name'], save_name='%s_%i' % (self.camera_params['save_name'], int(t*1000)))
 
             return np.hstack(
                 [
@@ -262,8 +273,22 @@ class AirSim(nengo.Process):
             "angular_velocity": ang_vel,
         }
 
-    def get_camera_feedback(self, name):
-        NotImplementedError
+    def get_camera_feedback(self, camera_name='0', save_name='airsim_camera'):
+        responses = self.client.simGetImages([airsim.ImageRequest(camera_name, airsim.ImageType.Scene, False, False)])
+        response = responses[0]
+
+        # get numpy array
+        img1d = np.fromstring(response.image_data_uint8, dtype=np.uint8) 
+
+        # reshape array to 4 channel image array H X W X 4
+        img_rgb = img1d.reshape(response.height, response.width, 3)
+
+        # original image is fliped vertically
+        # img_rgb = np.flipud(img_rgb)
+
+        # write to png 
+        airsim.write_png(os.path.normpath(save_name + '.png'), img_rgb) 
+        # print('img  %s saved' % save_name)
 
     def get_state(self, name):
         """Get the state of an object, return 3D position and orientation
