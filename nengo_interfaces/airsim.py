@@ -74,6 +74,8 @@ class AirSim(nengo.Process):
         self.euler_order = "rxyz"
         self.Vector3r = airsim.Vector3r
 
+        self.training_mode = False
+
         if self.camera_params:
             max_fps = np.round(1/self.dt, 4)
             assert self.camera_params['fps'] <= max_fps, (
@@ -98,6 +100,8 @@ class AirSim(nengo.Process):
             if not frame_rate_locked:
                 raise ValueError ('Please select an fps with a time/image that is a multiple of your timestep:', available_frame_rates)
 
+            self.training_mode = self.camera_params['training_mode']
+
         self.client = airsim.MultirotorClient()
 
         # from airsim/airlib/include/vehicles/multirotor/RotorParams.hpp
@@ -106,12 +110,18 @@ class AirSim(nengo.Process):
         prop_diam = 0.2275
         self.max_thrust = 4.179446268
         self.k = C_T * air_density * prop_diam ** 4
-        self.air_density_ratio = (
-            self.client.simGetGroundTruthEnvironment().air_density / air_density
-        )
 
-        # size_in = the number of rotors on our quadcopter, hardcoded
-        size_in = 4
+        if not self.training_mode:
+            # size_in = the number of rotors on our quadcopter, hardcoded
+            size_in = 4
+            self.air_density_ratio = (
+                self.client.simGetGroundTruthEnvironment().air_density / air_density
+            )
+
+        else:
+            # controlling camera instead, so use position and orientation of path planner
+            # size_in = 6
+            size_in = 12
         # size_out = number of parameters in our feedback array, which is of the form
         # [x, y, z, dx, dy, dz, roll, pitch, yaw, droll, dpitch, dyaw]
         size_out = 12
@@ -120,8 +130,16 @@ class AirSim(nengo.Process):
     def connect(self, pause=True):
         self.client.confirmConnection()
         self.client.reset()
-        self.client.enableApiControl(True)
-        self.client.armDisarm(True)
+        if not self.training_mode:
+            self.client.enableApiControl(True)
+            self.client.armDisarm(True)
+
+            # initialize wind and payload to zero
+            zeros = self.Vector3r(0, 0, 0)
+            self.client.simSetWind(zeros)
+            # self.client.simSetExtForce(zeros)
+
+
         # https://microsoft.github.io/AirSim/apis/#async-methods-duration-and-max_wait_seconds
         # NOTE appending .join() will make the call synchronous (wait for completion)
         if self.takeoff:
@@ -133,21 +151,18 @@ class AirSim(nengo.Process):
         # self.is_paused = False
         self.is_paused = pause
         self.client.simPause(self.is_paused)
-        # initialize wind and payload to zero
-        zeros = self.Vector3r(0, 0, 0)
-        self.client.simSetWind(zeros)
-        # self.client.simSetExtForce(zeros)
 
     def disconnect(self):
 
         self.client.simPause(False)
-        ext_force = self.Vector3r(0.0, 0.0, 0.0)
-        # self.client.simSetExtForce(ext_force)
-        self.client.simSetWind(ext_force)
-
         self.client.reset()
-        self.client.enableApiControl(False)
-        self.client.armDisarm(False)
+
+        if not self.training_mode:
+            self.client.enableApiControl(False)
+            self.client.armDisarm(False)
+            ext_force = self.Vector3r(0.0, 0.0, 0.0)
+            # self.client.simSetExtForce(ext_force)
+            self.client.simSetWind(ext_force)
         self.client.simPause(True)
 
     def pause(self, sim_pause=True):
@@ -182,7 +197,12 @@ class AirSim(nengo.Process):
             u *= self.input_scale
 
             # print("u: ", [float("%.3f" % val) for val in u])
-            self.send_pwm_signal(u)
+            if not self.training_mode:
+                self.send_pwm_signal(u)
+            else:
+                cam_state = [x[0], x[1], x[2], x[6], x[7], x[8]]
+                self.set_camera_state(cam_state)
+
             feedback = self.get_feedback()
 
             # render camera feedback
@@ -251,27 +271,38 @@ class AirSim(nengo.Process):
             - rc_data
             - gps_location
         """
-        state = self.client.getMultirotorState().kinematics_estimated
-        pos = state.position.to_numpy_array()
+        if not self.training_mode:
+            state = self.client.getMultirotorState().kinematics_estimated
+            pos = state.position.to_numpy_array()
 
-        airsim_quat = state.orientation.to_numpy_array()
-        # NOTE: The quadcopter feedback does not need to be rotated to be in the
-        # expected axes, unlike object orientation feedback.
-        # We do need to reorder quaternion to [w, x, y, z] still, though.
-        quat = np.array(
-            [airsim_quat[3], airsim_quat[0], airsim_quat[1], airsim_quat[2]]
-        )
+            airsim_quat = state.orientation.to_numpy_array()
+            # NOTE: The quadcopter feedback does not need to be rotated to be in the
+            # expected axes, unlike object orientation feedback.
+            # We do need to reorder quaternion to [w, x, y, z] still, though.
+            quat = np.array(
+                [airsim_quat[3], airsim_quat[0], airsim_quat[1], airsim_quat[2]]
+            )
 
-        lin_vel = self.vel_scale * state.linear_velocity.to_numpy_array()
-        ang_vel = self.vel_scale * state.angular_velocity.to_numpy_array()
+            lin_vel = self.vel_scale * state.linear_velocity.to_numpy_array()
+            ang_vel = self.vel_scale * state.angular_velocity.to_numpy_array()
 
-        return {
-            "position": pos,
-            "linear_velocity": lin_vel,
-            "quaternion": quat,
-            "taitbryan": self.quat_to_taitbryan(quat),
-            "angular_velocity": ang_vel,
-        }
+            return {
+                "position": pos,
+                "linear_velocity": lin_vel,
+                "quaternion": quat,
+                "taitbryan": self.quat_to_taitbryan(quat),
+                "angular_velocity": ang_vel,
+            }
+        else:
+            return {
+                "position": [0, 0, 0],
+                "linear_velocity": [0, 0, 0],
+                "quaternion": [0, 0, 0],
+                "taitbryan": [0, 0, 0],
+                "angular_velocity": [0, 0, 0],
+            }
+
+
 
     def get_camera_feedback(self, camera_name='0', save_name='airsim_camera'):
         responses = self.client.simGetImages([airsim.ImageRequest(camera_name, airsim.ImageType.Scene, False, False)])
@@ -345,6 +376,44 @@ class AirSim(nengo.Process):
 
         )
         self.client.simSetObjectPose(name, pose, teleport=True)
+
+    def set_camera_state(self, state, name=None):
+        """Set the state of object given 3D location and quaternion
+            Accepts state position in meters and orientation in euler
+            angles in order set by euler_order in the __init__
+
+        Parameters
+        ----------
+        name: string
+            the name of the object
+        xyz: 3d array or list, optional (Default: None)
+            the desired xyz position in meters
+            if you do not want to set the position, set to None
+        orientation: 3d array or list, optional (Default: None)
+            the desired orientation as euler angles in the format set by
+            self.euler_order in the __init__
+        """
+        if name is None:
+            name = self.camera_params['camera_name']
+        xyz = state[:3]
+        orientation = state[3:]
+        xyz = [float(xyz[0]), float(xyz[1]), float(xyz[2])]
+
+        orientation = transform.quaternion_from_euler(orientation[0], orientation[1], orientation[2], self.euler_order)
+
+        # reorder to xyzw to match the quaternion format of airsim
+        quat = [float(orientation[1]), float(orientation[2]), float(orientation[3]), float(orientation[0])]
+        pose = Pose(
+                position_val=Vector3r(
+                    x_val=xyz[0], y_val=xyz[1], z_val=xyz[2]
+                ),
+                orientation_val=Quaternionr(
+                    x_val=quat[0], y_val=quat[1], z_val=quat[2], w_val=quat[3]
+                )
+
+        )
+        self.client.simSetCameraPose(name, pose) #, teleport=True)
+
 
     def quat_to_taitbryan(self, quat):
         """Convert quaternion to Tait-Bryan Euler angles
