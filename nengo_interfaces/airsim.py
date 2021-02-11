@@ -136,7 +136,7 @@ class AirSim(nengo.Process):
 
             # initialize wind and payload to zero
             zeros = self.Vector3r(0, 0, 0)
-            self.client.simSetWind(zeros)
+            # self.client.simSetWind(zeros)
             # self.client.simSetExtForce(zeros)
 
 
@@ -162,7 +162,7 @@ class AirSim(nengo.Process):
             self.client.armDisarm(False)
             ext_force = self.Vector3r(0.0, 0.0, 0.0)
             # self.client.simSetExtForce(ext_force)
-            self.client.simSetWind(ext_force)
+            # self.client.simSetWind(ext_force)
         self.client.simPause(True)
 
     def pause(self, sim_pause=True):
@@ -211,7 +211,7 @@ class AirSim(nengo.Process):
                 if (int(1000*np.round(t-self.dt, 4))) % int(1000*np.round(1/self.camera_params['fps'], 4)) < 1e-5:
                     self.fps_count += 1
                     # scale to seconds and use integers to minimize rounding issues with floats
-                    self.get_camera_feedback(camera_name=self.camera_params['camera_name'], save_name='%s_%i' % (self.camera_params['save_name'], int(t*1000)))
+                    self.get_camera_feedback(camera_name=self.camera_params['camera_name'], save_name='%s/frame_%i' % (self.camera_params['save_name'], int(t*1000)))
 
             return np.hstack(
                 [
