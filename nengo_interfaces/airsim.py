@@ -127,7 +127,7 @@ class AirSim(nengo.Process):
         size_out = 12
         super().__init__(size_in, size_out, default_dt=dt, seed=seed)
 
-    def connect(self, pause=True):
+    def connect(self, pause=False):
         self.client.confirmConnection()
         self.client.reset()
         if not self.training_mode:
@@ -152,9 +152,10 @@ class AirSim(nengo.Process):
         self.is_paused = pause
         self.client.simPause(self.is_paused)
 
-    def disconnect(self):
+    def disconnect(self, pause=False):
 
-        self.client.simPause(False)
+        if pause:
+            self.client.simPause(False)
         self.client.reset()
 
         if not self.training_mode:
@@ -163,7 +164,9 @@ class AirSim(nengo.Process):
             ext_force = self.Vector3r(0.0, 0.0, 0.0)
             # self.client.simSetExtForce(ext_force)
             # self.client.simSetWind(ext_force)
-        self.client.simPause(True)
+
+        if pause:
+            self.client.simPause(True)
 
     def pause(self, sim_pause=True):
         """
