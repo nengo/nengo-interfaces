@@ -104,6 +104,38 @@ class AirSim(nengo.Process):
 
         self.client = airsim.MultirotorClient()
 
+        # Set the camera orientation
+        # NOTE: airsim API doesn't seem to be working
+        # if self.camera_params:
+        #     orientation = transform.quaternion_from_euler(
+        #             camera_params['orientation'][0],
+        #             camera_params['orientation'][1],
+        #             camera_params['orientation'][2],
+        #             self.euler_order
+        #     )
+        #
+        #     # reorder to xyzw to match the quaternion format of airsim
+        #     quat = [float(orientation[1]), float(orientation[2]), float(orientation[3]), float(orientation[0])]
+        #     orientation_val=Quaternionr(
+        #             x_val=quat[0], y_val=quat[1], z_val=quat[2], w_val=quat[3]
+        #     )
+        #     # pose = Pose(
+        #     #     orientation_val=orientation_val
+        #     # )
+        #
+        #     self.client.simSetCameraOrientation(
+        #             camera_name=self.camera_params['camera_name'],
+        #             orientation=orientation_val
+        #     )
+        #             # vehicle_name='Drone1'
+        #
+        #     # self.client.simSetCameraPose(
+        #     #         camera_name='BP_PIPCamera_C_2',
+        #     #         # camera_name=self.camera_params['camera_name'],
+        #     #         pose=pose,
+        #     #         # vehicle_name='Drone1'
+        #     # )
+
         # from airsim/airlib/include/vehicles/multirotor/RotorParams.hpp
         C_T = 0.109919
         air_density = 1.225
