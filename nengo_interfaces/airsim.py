@@ -314,10 +314,10 @@ class AirSim(nengo.Process):
         return euler
 
     def ea_xyz_to_zxy(self, ang):
-        """Converts Euler angles from x-y-z to z-x-y convention """
+        """Converts Euler angles from x-y-z to z-x-y convention"""
 
         def b(num):
-            """ forces magnitude to be 1 or less """
+            """forces magnitude to be 1 or less"""
             if abs(num) > 1.0:
                 return np.copysign(1.0, num)
             else:

@@ -8,10 +8,10 @@ from nengo_interfaces.airsim import AirSim
 
 
 def convert_angles(ang):
-    """ Converts Euler angles from x-y-z to z-x-y convention """
+    """Converts Euler angles from x-y-z to z-x-y convention"""
 
     def b(num):
-        """ forces magnitude to be 1 or less """
+        """forces magnitude to be 1 or less"""
         if abs(num) > 1.0:
             return math.copysign(1.0, num)
         else:
