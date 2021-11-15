@@ -4,6 +4,7 @@ NOTE: If you don't know the variables for your FMU, set debug=True, and the list
 variables will be printed on instantiation.
 """
 import os
+import sys
 
 import matplotlib.pyplot as plt
 import nengo
@@ -15,8 +16,11 @@ dt = 0.001  # time step
 T = 30  # sim time (s)
 
 # Instantiate FMI interface
-curr_dir = os.path.dirname(os.path.abspath(__file__))
-path = os.path.join(curr_dir, "fmu/linux_fmu/Env_TrajControl_DSME_infty.fmu")
+# get the path to the FMU
+if len(sys.argv) < 2:
+    raise Exception("Provide the path to the fmu as a command line argument")
+else:
+    path = sys.argv[1]
 
 interface = FMI(
     path=path,

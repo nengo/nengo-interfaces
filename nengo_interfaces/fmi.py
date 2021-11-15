@@ -45,7 +45,9 @@ class FMI(nengo.Process):
         if self.debug:
             print(f"FMU Model: {path}")
             print(f"Model Type: {type(self.model)}")
-            print("---Available Parameters---\n ", self.data_dict)
+            print("---Available Parameters---\n ")
+            for key in self.data_dict:
+                print(f"-{key}: [{self.data_dict[key]}]")
 
         self.input_keys = [] if input_keys is None else input_keys
         self.feedback_keys = [] if feedback_keys is None else feedback_keys
@@ -80,7 +82,7 @@ class FMI(nengo.Process):
         for ii, key in enumerate(self.params):
             if debug:
                 if ii == 0:
-                    print("__________\nRAW KEYS")
+                    print("__________\nRaw keys loaded from FMI model")
                 print(f"- {key}")
 
             # if the key contains square open bracket,
@@ -116,7 +118,7 @@ class FMI(nengo.Process):
         self.set_state(self.init_dict)
         self.t = 0.0
 
-    def make_step(self, shape_in, shape_out, dt, rng, state):
+    def make_step(self, shape_in, shape_out, dt, rng):
         """Create the function for the FMU interfacing Nengo Node"""
 
         def step(t, x):
