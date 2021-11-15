@@ -118,7 +118,7 @@ class FMI(nengo.Process):
         self.set_state(self.init_dict)
         self.t = 0.0
 
-    def make_step(self, shape_in, shape_out, dt, rng):
+    def make_step(self, shape_in, shape_out, dt, rng, state):
         """Create the function for the FMU interfacing Nengo Node"""
 
         def step(t, x):
