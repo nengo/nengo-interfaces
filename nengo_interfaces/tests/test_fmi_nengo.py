@@ -32,6 +32,7 @@ interface = FMI(
         "act_position_y",
         "act_cross_track_error",
     ],
+    debug=True,
 )
 
 model = nengo.Network(seed=12)

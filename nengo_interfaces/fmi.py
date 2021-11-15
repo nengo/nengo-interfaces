@@ -46,8 +46,8 @@ class FMI(nengo.Process):
             print(f"FMU Model: {path}")
             print(f"Model Type: {type(self.model)}")
             print("---Available Parameters---\n ")
-            for key in self.data_dict:
-                print(f"-{key}: [{self.data_dict[key]}]")
+            for item in self.data_dict.items():
+                print(f"- {item}")
 
         self.input_keys = [] if input_keys is None else input_keys
         self.feedback_keys = [] if feedback_keys is None else feedback_keys
