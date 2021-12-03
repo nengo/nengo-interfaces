@@ -5,6 +5,7 @@ import os
 import pprint
 import time
 import warnings
+import copy
 from os.path import expanduser
 
 import nengo
@@ -147,22 +148,24 @@ class AirSim(nengo.Process):
 
             self.use_physics = self.camera_params["use_physics"]
 
-        if "capture_settings" not in camera_params:
-            camera_params["capture_settings"] = None
+            if "capture_settings" not in camera_params:
+                camera_params["capture_settings"] = None
 
         # update our settings.json that airsim reads in
         home = expanduser("~")
         with open(f"{home}/Documents/AirSim/settings.json", "r+") as fp:
             data = json.load(fp)
+            prev_data = copy.deepcopy(data)
+
             # physics mode, set to multirotor
             if self.use_physics:
                 data["SimMode"] = "Multirotor"
-                data["EngineSound"] = "true"
+                data["EngineSound"] = True
                 print("phys mode")
             # computer vision, turn off physics to speed things up
             else:
                 data["SimMode"] = "ComputerVision"
-                data["EngineSound"] = "false"
+                data["EngineSound"] = False
 
             # can turn display off for speed boost
             if not show_display:
@@ -171,20 +174,24 @@ class AirSim(nengo.Process):
                 data["ViewMode"] = ""  # fly with me for drone, spring chase for cars
 
             # if user passes in camera params with capture settings, update the settings.json
-            if isinstance(camera_params["capture_settings"], dict):
-                camera_idx = (
-                    camera_params["capture_settings"]["camera_idx"]
-                    if "camera_idx" in camera_params["capture_settings"]
-                    else 0
-                )
-                for key in camera_params["capture_settings"]:
-                    data["CameraDefaults"]["CaptureSettings"][camera_idx][
-                        key
-                    ] = camera_params["capture_settings"][key]
+            if isinstance(camera_params, dict):
+                if isinstance(camera_params["capture_settings"], dict):
+                    camera_idx = (
+                        camera_params["capture_settings"]["camera_idx"]
+                        if "camera_idx" in camera_params["capture_settings"]
+                        else 0
+                    )
+                    for key in camera_params["capture_settings"]:
+                        data["CameraDefaults"]["CaptureSettings"][camera_idx][
+                            key
+                        ] = camera_params["capture_settings"][key]
 
             fp.seek(0)
             json.dump(data, fp, indent=4)
             fp.truncate()
+
+            if data != prev_data:
+                raise Exception("You will need to Stop and Start UE4 for setting.json changes to apply")
 
         # instantiate our microsoft airsim client
         self.client = airsim.MultirotorClient()
@@ -197,7 +204,7 @@ class AirSim(nengo.Process):
         self.max_thrust = 4.179446268
         self.k = C_T * air_density * prop_diam ** 4
 
-        if not self.use_physics:
+        if self.use_physics:
             # size_in = the number of rotors on our quadcopter, hardcoded
             size_in = 4
             self.air_density_ratio = (
@@ -225,7 +232,7 @@ class AirSim(nengo.Process):
         """
         self.client.confirmConnection()
         self.client.reset()
-        if not self.use_physics:
+        if self.use_physics:
             self.client.enableApiControl(True)
             self.client.armDisarm(True)
 
@@ -250,7 +257,7 @@ class AirSim(nengo.Process):
             self.client.simPause(False)
         self.client.reset()
 
-        if not self.use_physics:
+        if self.use_physics:
             self.client.enableApiControl(False)
             self.client.armDisarm(False)
             ext_force = self.Vector3r(0.0, 0.0, 0.0)
@@ -287,7 +294,7 @@ class AirSim(nengo.Process):
             # bias and scale the input signals
             u = x
 
-            if not self.use_physics:
+            if self.use_physics:
                 self.send_pwm_signal(u)
             else:
                 cam_state = [x[0], x[1], x[2], x[6], x[7], x[8]]
@@ -367,7 +374,7 @@ class AirSim(nengo.Process):
             - rc_data
             - gps_location
         """
-        if not self.use_physics:
+        if self.use_physics:
             state = self.client.getMultirotorState().kinematics_estimated
             pos = state.position.to_numpy_array()
 
