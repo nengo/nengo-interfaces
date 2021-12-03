@@ -1,9 +1,11 @@
 # Compares the feedback when using the nengo node vs interface directly
-import numpy as np
-import nengo
-import matplotlib.pyplot as plt
-from nengo_interfaces.airsim import AirSim
 import time
+
+import matplotlib.pyplot as plt
+import nengo
+import numpy as np
+
+from nengo_interfaces.airsim import AirSim
 
 dt = 0.01
 sim_time = 3
@@ -18,7 +20,7 @@ net = nengo.Network(seed=0)
 
 with net:
     interface_node = nengo.Node(interface)
-    u = nengo.Node(lambda x:control_u, size_in=0, size_out=4)
+    u = nengo.Node(lambda x: control_u, size_in=0, size_out=4)
     nengo.Connection(u, interface_node)
     state_probe = nengo.Probe(interface_node)
 sim = nengo.Simulator(net, dt=0.01, seed=0)
@@ -33,13 +35,15 @@ interface.connect()
 time.sleep(1)
 state = []
 
-labs = ['x', 'y', 'z', 'dx', 'dy', 'dz', 'a', 'b', 'g', 'da', 'db', 'dg']
-for ii in range(0, int(sim_time/dt)):
+labs = ["x", "y", "z", "dx", "dy", "dz", "a", "b", "g", "da", "db", "dg"]
+for ii in range(0, int(sim_time / dt)):
     output = interface.get_feedback()
-    output = np.hstack((
-        np.hstack((output['position'], output['linear_velocity'])),
-        np.hstack((output['taitbryan'], output['angular_velocity']))
-    ))
+    output = np.hstack(
+        (
+            np.hstack((output["position"], output["linear_velocity"])),
+            np.hstack((output["taitbryan"], output["angular_velocity"])),
+        )
+    )
 
     state.append(output)
     interface.send_pwm_signal(control_u)
@@ -76,9 +80,9 @@ plt.figure()
 data = sim.data[state_probe].T
 print(data.shape)
 for ii in range(0, len(data)):
-    plt.subplot(len(data), 1, ii+1)
-    plt.plot(data[ii], label='%s Node' % labs[ii])
-    plt.plot(state[ii], label='%s Node No Nengo' % labs[ii])
+    plt.subplot(len(data), 1, ii + 1)
+    plt.plot(data[ii], label="%s Node" % labs[ii])
+    plt.plot(state[ii], label="%s Node No Nengo" % labs[ii])
     # plt.plot(state_old[ii], label='%s Old Airsim' % labs[ii])
     plt.legend()
 plt.show()
