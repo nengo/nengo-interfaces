@@ -21,7 +21,6 @@ def convert_angles(ang):
     s2 = math.sin(ang[1])
     s3 = math.sin(ang[2])
     c1 = math.cos(ang[0])
-    c2 = math.cos(ang[1])
     c3 = math.cos(ang[2])
 
     pitch = math.asin(b(c1 * c3 * s2 - s1 * s3))

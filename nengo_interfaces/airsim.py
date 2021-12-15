@@ -1,11 +1,9 @@
-import ast
+import copy
 import json
 import math
 import os
-import pprint
 import time
 import warnings
-import copy
 from os.path import expanduser
 
 import nengo
@@ -28,8 +26,8 @@ class AirSim(nengo.Process):
     """Provides an easy to use API for AirSim in Nengo models.
 
     NOTES:
-    - AirSim returns quaternions in the [x, y, z, w] format. We convert this to the
-    [w, x, y, z] format for all output and expect [w, x, y, z] for all input.
+    - AirSim returns quaternions in the [x, y, z, w] format. We convert this to
+    the [w, x, y, z] format for all output and expect [w, x, y, z] for all input
     - All Euler angles are output / expected to be in Tait-Bryan form.
 
 
@@ -38,8 +36,9 @@ class AirSim(nengo.Process):
     dt : float, optional (Default: 0.01)
         The time step for the simulation dynamics.
     run_async : boolean, optional (Default: False)
-        If true, run AirSim simulation independent of Nengo simulation. If false,
-        run the two in lockstep, i.e., one Nengo time step then one AirSim time step
+        If true, run AirSim simulation independent of Nengo simulation.
+        If false, run the two in lockstep, i.e., one Nengo time step then one
+        AirSim time step
     camera_params : dict, optional (Default: None)
         'camera_name' : string or int
         'fps' : float
@@ -51,11 +50,14 @@ class AirSim(nengo.Process):
         'capture_settings': dict, Optional (Default: None)
             Optional parameters to adjust in the capture settings
             These are typically manually set in ~/Documents/AirSim/settings.json
-            any of the following can be passed in and will update your settings.json
-            If a camera_idx is not passed in, it will be assumed to be the first camera
-            in the list of your settings.json
+            any of the following can be passed in and will update
+            Documents/Airsim/settings.json
+            If a camera_idx is not passed in, it will be assumed to be the first
+            camera in the list of your settings.json
                 {
-                    "camera_idx": 0, # index of camera in your settings.json CameraDefaults
+                        #NOTE camera_idx is the index of camera in your
+                        settings.json CameraDefaults
+                    "camera_idx": 0,
                     "ImageType": 0,
                     "Width": 832,
                     "Height": 832,
@@ -71,7 +73,8 @@ class AirSim(nengo.Process):
                 }
 
     track_input : bool, option (Default: False)
-        If True, store the input that is passed in to the Node in self.input_track.
+        If True, store the input that is passed in to the Node in
+        self.input_track.
     seed : int, optional (Default: None)
         Set the seed on the rng.
     takeoff : boolean, optional (Default: True)
@@ -80,7 +83,7 @@ class AirSim(nengo.Process):
     show_display: bool, optional (Default: True)
     """
 
-    def __init__(
+    def __init__(  # noqa: C901
         self,
         dt=0.01,
         run_async=False,
@@ -90,9 +93,10 @@ class AirSim(nengo.Process):
         show_display=True,
     ):
         self.dt = dt
-        # empirically determined function from recorded velocity feedback from various dt
-        # the velocity feedback from airsim does not match the derivative of the position feedback
-        # see this github issue for details: https://github.com/microsoft/AirSim/issues/2914
+        # empirically determined function from recorded velocity feedback
+        # from various dt the velocity feedback from airsim does not match
+        # the derivative of the position feedback. See this github issue:
+        # https://github.com/microsoft/AirSim/issues/2914
         self.vel_scale = 1 / (30.55 * self.dt + 0.03)
 
         self.run_async = run_async
@@ -110,23 +114,21 @@ class AirSim(nengo.Process):
             max_fps = np.round(1 / self.dt, 4)
             assert (
                 self.camera_params["fps"] <= max_fps
-            ), "With a dt of %.3f sec your maximum camera fps is %.2f" % (
-                self.dt,
-                1 / self.dt,
-            )
+            ), f"For dt={self.dt:.3f}sec your max camera fps={1/self.dt:.2f}"
             self.fps_remainder = (1 / camera_params["fps"]) - int(
                 1 / camera_params["fps"]
             )
             self.fps_count = 0
 
-            # calculate the possible frame rates we can capture images at given our timestep
+            # calculate the possible frame rates we can capture images at given
+            # our timestep
             frame_rate_locked = False
             available_frame_rates = []
             fps_multiple = 1
             while max_fps >= self.camera_params["fps"]:
                 available_frame_rates.append(max_fps)
 
-                if max_fps == self.camera_params["fps"]:
+                if max_fps == self.camera_params["fps"]:  # pylint: disable=R1723
                     frame_rate_locked = True
                     break
                 else:
@@ -134,14 +136,16 @@ class AirSim(nengo.Process):
                     max_fps = np.round(1 / (self.dt * fps_multiple), 4)
             if not frame_rate_locked:
                 raise ValueError(
-                    "Please select an fps with a time/image that is a multiple of your timestep:",
+                    "Please select an fps with a time/image that is a multiple"
+                    + " of your timestep:",
                     available_frame_rates,
                 )
 
             # TODO remove after all projects updated
             if "training_mode" in camera_params:
                 warnings.warn(
-                    "'training_mode' key is deprecated, use 'use_physics' key instead to toggle physics engine"
+                    "'training_mode' key is deprecated, use 'use_physics' key"
+                    + " instead to toggle physics engine"
                 )
                 if "use_physics" not in camera_params:
                     camera_params["use_physics"] = camera_params["training_mode"]
@@ -153,7 +157,9 @@ class AirSim(nengo.Process):
 
         # update our settings.json that airsim reads in
         home = expanduser("~")
-        with open(f"{home}/Documents/AirSim/settings.json", "r+") as fp:
+        with open(  # pylint: disable=W1514
+            f"{home}/Documents/AirSim/settings.json", "r+"
+        ) as fp:
             data = json.load(fp)
             prev_data = copy.deepcopy(data)
 
@@ -171,9 +177,11 @@ class AirSim(nengo.Process):
             if not show_display:
                 data["ViewMode"] = "NoDisplay"
             else:
-                data["ViewMode"] = ""  # fly with me for drone, spring chase for cars
+                # fly with me for drone, spring chase for cars
+                data["ViewMode"] = ""
 
-            # if user passes in camera params with capture settings, update the settings.json
+            # if user passes in camera params with capture settings,
+            # update the settings.json
             if isinstance(camera_params, dict):
                 if isinstance(camera_params["capture_settings"], dict):
                     camera_idx = (
@@ -191,12 +199,16 @@ class AirSim(nengo.Process):
             fp.truncate()
 
             if data != prev_data:
-                raise Exception("You will need to Stop and Start UE4 for setting.json changes to apply")
+                raise Exception(
+                    "You will need to Stop and Start UE4 for setting.json"
+                    + " changes to apply"
+                )
 
         # instantiate our microsoft airsim client
         self.client = airsim.MultirotorClient()
 
-        # constants required to convert our control rotor velocities to the required pwm signal
+        # constants required to convert our control rotor velocities
+        # to the required pwm signal
         # from airsim/airlib/include/vehicles/multirotor/RotorParams.hpp
         C_T = 0.109919
         air_density = 1.225
@@ -212,10 +224,12 @@ class AirSim(nengo.Process):
             )
 
         else:
-            # controlling camera instead, so use position and orientation of path planner
+            # controlling camera instead, so use position and orientation
+            # of path planner
             # size_in = 6
             size_in = 12
-        # size_out = number of parameters in our feedback array, which is of the form
+        # size_out = number of parameters in our feedback array,
+        # which is of the form...
         # [x, y, z, dx, dy, dz, roll, pitch, yaw, droll, dpitch, dyaw]
         size_out = 12
         super().__init__(size_in, size_out, default_dt=dt, seed=seed)
@@ -236,9 +250,6 @@ class AirSim(nengo.Process):
             self.client.enableApiControl(True)
             self.client.armDisarm(True)
 
-            # initialize wind and payload to zero
-            zeros = self.Vector3r(0, 0, 0)
-
         # https://microsoft.github.io/AirSim/apis/#async-methods-duration-and-max_wait_seconds
         # NOTE appending .join() will make the call synchronous (wait for completion)
         if self.takeoff:
@@ -252,7 +263,12 @@ class AirSim(nengo.Process):
         self.client.simPause(self.is_paused)
 
     def disconnect(self, pause=False):
-
+        """
+        Parameters
+        ----------
+        pause: boolean, Optional (Default: False)
+            whether to pause on disconnect
+        """
         if pause:
             self.client.simPause(False)
         self.client.reset()
@@ -260,7 +276,8 @@ class AirSim(nengo.Process):
         if self.use_physics:
             self.client.enableApiControl(False)
             self.client.armDisarm(False)
-            ext_force = self.Vector3r(0.0, 0.0, 0.0)
+            # ext_force = self.Vector3r(0.0, 0.0, 0.0)
+            # wind_force = self.Vector3r(0.0, 0.0, 0.0)
 
         if pause:
             self.client.simPause(True)
@@ -304,16 +321,20 @@ class AirSim(nengo.Process):
 
             # render camera feedback
             if self.camera_params:
-                # subtract dt because we start at dt, not zero, but we want an image on the first step, before the drone starts moving
+                # subtract dt because we start at dt, not zero, but
+                # we want an image on the first step, before the drone starts
+                # moving
                 if (int(1000 * np.round(t - self.dt, 4))) % int(
                     1000 * np.round(1 / self.camera_params["fps"], 4)
                 ) < 1e-5:
                     self.fps_count += 1
-                    # scale to seconds and use integers to minimize rounding issues with floats
+                    # scale to seconds and use integers to minimize
+                    # rounding issues with floats
                     self.get_camera_feedback(
                         camera_name=self.camera_params["camera_name"],
-                        save_name="%s/frame_%i"
-                        % (self.camera_params["save_name"], int(t * 1000)),
+                        save_name=(
+                            f"{self.camera_params['save_name']}/frame_{int(t*1000)}"
+                        ),
                     )
 
             return np.hstack(
@@ -336,16 +357,20 @@ class AirSim(nengo.Process):
         ----------
         u: list of 4 floats
             airsim expected pwm signal to each motor in the range of -1 to 1
-            This function accepts rotor velocities in rad/sec and converts them to pwm
+            This function accepts rotor velocities in rad/sec and converts them
+            to pwm
         dt: float
             the time to run the pwm signal for
         """
-        # the pwm output is calculated as thrust / (max_thrust * air_density_ratio)
-        # where thrust is k*w**2 -  https://github.com/microsoft/AirSim/issues/2592
+        # the pwm output is calculated as...
+        # thrust / (max_thrust * air_density_ratio)
+        # where thrust is k*w**2
+        # https://github.com/microsoft/AirSim/issues/2592
         # NOTE that the k calculated in airsim uses velocity in units of rev/sec
         pwm = np.squeeze(self.k * u / (self.max_thrust * self.air_density_ratio))
 
-        # NOTE appending .join() will make the call synchronous (wait for completion)
+        # NOTE appending .join() will make the call synchronous
+        # (wait for completion)
         if self.run_async:
             self.client.moveByMotorPWMsAsync(pwm[0], pwm[1], pwm[2], pwm[3], self.dt)
         else:
@@ -360,11 +385,12 @@ class AirSim(nengo.Process):
 
     def get_feedback(self):
         """
-        Calls the simGetGroundTruthKinematics to get system feedback, which is then
-        parsed from the airsim custom type to a dict
+        Calls the simGetGroundTruthKinematics to get system feedback, which is
+        then parsed from the airsim custom type to a dict
 
         returns dict of state in the form:
-            {position, quaternion(in format w,x,y,z), taitbryan(euler in taitbryan angles)}
+            {position, quaternion(in format w,x,y,z), taitbryan(euler in
+            taitbryan angles)}
 
         the full state can be accessed from self.state with the main keys:
             - landed_state
@@ -379,8 +405,8 @@ class AirSim(nengo.Process):
             pos = state.position.to_numpy_array()
 
             airsim_quat = state.orientation.to_numpy_array()
-            # NOTE: The quadcopter feedback does not need to be rotated to be in the
-            # expected axes, unlike object orientation feedback.
+            # NOTE: The quadcopter feedback does not need to be rotated to be in
+            # the expected axes, unlike object orientation feedback.
             # We do need to reorder quaternion to [w, x, y, z] still, though.
             quat = np.array(
                 [airsim_quat[3], airsim_quat[0], airsim_quat[1], airsim_quat[2]]
@@ -406,6 +432,16 @@ class AirSim(nengo.Process):
             }
 
     def get_camera_feedback(self, camera_name="0", save_name="airsim_camera"):
+        """
+        Gets an image from the specified camera, and saved to save_name
+
+        Parameters
+        ----------
+        camera_name: int, Optional (Default: 0)
+            the camera index in your settings.json
+        save_name: string, Optional (Default: airsim_camera)
+            the filename to save the image to
+        """
         responses = self.client.simGetImages(
             [airsim.ImageRequest(camera_name, airsim.ImageType.Scene, False, False)]
         )
@@ -550,7 +586,6 @@ class AirSim(nengo.Process):
         s2 = np.sin(ang[1])
         s3 = np.sin(ang[2])
         c1 = np.cos(ang[0])
-        c2 = np.cos(ang[1])
         c3 = np.cos(ang[2])
 
         pitch = math.asin(b(c1 * c3 * s2 - s1 * s3))
@@ -560,10 +595,11 @@ class AirSim(nengo.Process):
 
         yaw = math.asin(b((c1 * s3 + c3 * s1 * s2) / cp))  # flipped
         # Fix for getting the quadrants right
-        if c3 < 0 and yaw > 0:
-            yaw = np.pi - yaw
-        elif c3 < 0 and yaw < 0:
-            yaw = -np.pi - yaw
+        if c3 < 0:
+            if yaw > 0:
+                yaw = np.pi - yaw
+            elif yaw < 0:
+                yaw = -np.pi - yaw
 
         roll = math.asin(b((c3 * s1 + c1 * s2 * s3) / cp))  # flipped
         return [roll, pitch, yaw]
