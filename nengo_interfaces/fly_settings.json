@@ -1,0 +1,68 @@
+{
+    "SeeDocsAt": "https://github.com/Microsoft/AirSim/blob/master/docs/settings.md",
+    "SettingsVersion": 1.2,
+    "SimMode": "Multirotor",
+    "ClockType": "",
+    "ClockSpeed": 1,
+    "RpcEnabled": true,
+    "EngineSound": true,
+    "PhysicsEngineName": "",
+    "SpeedUnitFactor": 1.0,
+    "SpeedUnitLabel": "m/s",
+    "CameraDefaults": {
+        "CaptureSettings": [
+            {
+                "ImageType": 0,
+                "Width": 832,
+                "Height": 832,
+                "FOV_Degrees": 107,
+                "AutoExposureSpeed": 100,
+                "AutoExposureBias": 0,
+                "AutoExposureMaxBrightness": 0.64,
+                "AutoExposureMinBrightness": 0.03,
+                "MotionBlurAmount": 0,
+                "TargetGamma": 0.7,
+                "ProjectionMode": "",
+                "OrthoWidth": 5.12
+            }
+        ]
+    },
+    "Vehicles": {
+        "Drone1": {
+            "VehicleType": "SimpleFlight",
+            "AutoCreate": true,
+            "Cameras": {
+                "high_res": {
+                    "CaptureSettings": [
+                        {
+                            "ImageType": 0,
+                            "Width": 4320,
+                            "Height": 2160
+                        }
+                    ],
+                    "X": 0.5,
+                    "Y": 0.0,
+                    "Z": 0.1,
+                    "Pitch": 0.0,
+                    "Roll": 0.0,
+                    "Yaw": 0.0
+                }
+            }
+        }
+    },
+    "OriginGeopoint": {
+        "Latitude": 43.44241131,
+        "Longitude": -80.46615243,
+        "Altitude": 324
+    },
+    "Wind": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0
+    },
+    "ExtForce": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0
+    }
+}
