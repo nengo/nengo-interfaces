@@ -2,12 +2,12 @@
 # a UE4 sim restart
 # make sure that the Capture Settings: Width parameter does not match what you current have in your
 # ~/Documents/Airsim/settings.json
+import json
 import math
+from os.path import expanduser
 
 import nengo
-import json
 import numpy as np
-from os.path import expanduser
 
 from nengo_interfaces.airsim import AirSim
 
@@ -26,9 +26,9 @@ with open(  # pylint: disable=W1514
 airsim_dt = 0.01
 steps = 500
 
-green = '\033[92m'
-red = '\033[91m'
-endc = '\033[0m'
+green = "\033[92m"
+red = "\033[91m"
+endc = "\033[0m"
 
 # change a value in settings.json, this should throw a RuntimeError
 try:
@@ -39,12 +39,14 @@ try:
             "fps": 1,
             "save_name": "hi",
             "camera_name": 0,
-            "capture_settings": {"Width": prev_width+1},
+            "capture_settings": {"Width": prev_width + 1},
         },
         show_display=True,
     )
 except RuntimeError as e:
-    print(f"{green}RuntimeError thrown as expected to warn user to restart UE4 sim to settings.json changes to take place, test passed{endc}")
+    print(
+        f"{green}RuntimeError thrown as expected to warn user to restart UE4 sim to settings.json changes to take place, test passed{endc}"
+    )
     try:
         # set the value back to the original value
         interface = AirSim(
@@ -72,8 +74,12 @@ except RuntimeError as e:
             },
             show_display=True,
         )
-        print(f"{green}No error thrown when settings.json does not change, test passed{endc}")
+        print(
+            f"{green}No error thrown when settings.json does not change, test passed{endc}"
+        )
 
 except Exception as e:
-        # If the runtime error was not thrown, throw an error
-        raise Exception (f"\n{red}If you are reading this, the Airsim Interface FAILED to throw an Exception to warn the user to restart the UE4 sim for changes in settings.json to take place{endc}")
+    # If the runtime error was not thrown, throw an error
+    raise Exception(
+        f"\n{red}If you are reading this, the Airsim Interface FAILED to throw an Exception to warn the user to restart the UE4 sim for changes in settings.json to take place{endc}"
+    )
