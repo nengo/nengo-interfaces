@@ -153,7 +153,7 @@ class AirSim(nengo.Process):
                 camera_params["capture_settings"] = None
 
             # create the capture save folder if it doesn't exist
-            _tmp = camera_params['save_name']
+            _tmp = camera_params["save_name"]
             if _tmp is not None:
                 if not os.path.exists(_tmp):
                     os.makedirs(_tmp)
@@ -169,7 +169,7 @@ class AirSim(nengo.Process):
 
             # physics mode, set to multirotor
 
-            CUR_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), '.'))
+            CUR_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), "."))
             if self.use_physics:
                 data["SimMode"] = "Multirotor"
                 data["EngineSound"] = True
@@ -233,8 +233,8 @@ class AirSim(nengo.Process):
             # throw an error to inform the user that their UE4 sim needs to be
             # restarted for the changed to take effect
             if data != prev_data:
-                yellow = '\u001b[33m'
-                endc = '\033[0m'
+                yellow = "\u001b[33m"
+                endc = "\033[0m"
                 raise RuntimeError(
                     f"{yellow}You will need to Stop and Start UE4 for setting.json"
                     + f" changes to apply{endc}"
