@@ -15,10 +15,9 @@ from airsim.types import Pose, Quaternionr, Vector3r
 
 # https://github.com/microsoft/AirSim/blob/b7a65bb7f7a9471a2ec0ce6f573512b880d3197a/PythonClient/airsim/client.py#L679
 
-# Additional AirSim functions for applying arbitrary forces or simulated wind
+# Additional AirSim functions for applying arbitrary forces
 # available in this custom AirSim fork
 # https://github.com/p3jawors/AirSim/tree/wind2
-# self.client.simSetWind(np.array([Fx, Fy, Fz]))
 # self.client.simSetExtForce(np.array([Fx, Fy, Fz]))
 
 
@@ -43,7 +42,7 @@ class AirSim(nengo.Process):
         'camera_name' : string or int
         'fps' : float
         'save_name' : string
-        'use_physics' : bool
+        'use_physics' : bool, (Default: True if camera_params is None, else False)
             if True we move the drone around and simulate physics
             if False we move the camera around instead, this can speed up the
                 sim time for generating datasets that just require visual data
@@ -72,9 +71,6 @@ class AirSim(nengo.Process):
                     "OrthoWidth": 5.12
                 }
 
-    track_input : bool, option (Default: False)
-        If True, store the input that is passed in to the Node in
-        self.input_track.
     seed : int, optional (Default: None)
         Set the seed on the rng.
     takeoff : boolean, optional (Default: True)
@@ -101,16 +97,16 @@ class AirSim(nengo.Process):
 
         self.run_async = run_async
         self.camera_params = camera_params if camera_params is not None else {}
-        # self.track_input = track_input
         self.takeoff = takeoff
 
-        # self.input_track = []
         self.euler_order = "rxyz"
+        # Airsim class for vectors
         self.Vector3r = airsim.Vector3r
 
         self.use_physics = True
 
         if self.camera_params:
+            # make sure our desired fps isn't greater than the max possible (1/dt)
             max_fps = np.round(1 / self.dt, 4)
             assert (
                 self.camera_params["fps"] <= max_fps
@@ -142,6 +138,7 @@ class AirSim(nengo.Process):
                 )
 
             # TODO remove after all projects updated
+            # checks for deprecated parameter name while old projects get changed over
             if "training_mode" in camera_params:
                 warnings.warn(
                     "'training_mode' key is deprecated, use 'use_physics' key"
@@ -155,6 +152,13 @@ class AirSim(nengo.Process):
             if "capture_settings" not in camera_params:
                 camera_params["capture_settings"] = None
 
+            # create the capture save folder if it doesn't exist
+            _tmp = camera_params['save_name']
+            if _tmp is not None:
+                if not os.path.exists(_tmp):
+                    os.makedirs(_tmp)
+            _tmp = None
+
         # update our settings.json that airsim reads in
         home = expanduser("~")
         with open(  # pylint: disable=W1514
@@ -164,14 +168,40 @@ class AirSim(nengo.Process):
             prev_data = copy.deepcopy(data)
 
             # physics mode, set to multirotor
+
+            CUR_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), '.'))
             if self.use_physics:
                 data["SimMode"] = "Multirotor"
                 data["EngineSound"] = True
                 print("phys mode")
+
+                if "Vehicles" not in data.keys():
+                    # load vehicle params from backup file
+                    with open(  # pylint: disable=W1514
+                        f"{CUR_DIR}/fly_settings.json", "r+"
+                    ) as fp_fly:
+                        # save vehicle params to backup file
+                        vehicle_data = json.load(fp_fly)["Vehicles"]
+                        data["Vehicles"] = vehicle_data
+
             # computer vision, turn off physics to speed things up
             else:
                 data["SimMode"] = "ComputerVision"
                 data["EngineSound"] = False
+
+                if "Vehicles" in data.keys():
+                    with open(  # pylint: disable=W1514
+                        f"{CUR_DIR}/fly_settings.json", "r+"
+                    ) as fp_fly:
+                        # save vehicle params to backup file
+                        vehicle_data = json.load(fp_fly)
+                        vehicle_data["Vehicles"] = data["Vehicles"]
+                        fp_fly.seek(0)
+                        json.dump(vehicle_data, fp_fly, indent=4)
+                        fp_fly.truncate()
+
+                    # remove from dict as this will break ComputerVision mode
+                    data.pop("Vehicles")
 
             # can turn display off for speed boost
             if not show_display:
@@ -198,10 +228,16 @@ class AirSim(nengo.Process):
             json.dump(data, fp, indent=4)
             fp.truncate()
 
+            # The settings.json get loaded in when the UE4 sim starts, which is
+            # required for the Airsim API to connect. If our settings have changed
+            # throw an error to inform the user that their UE4 sim needs to be
+            # restarted for the changed to take effect
             if data != prev_data:
-                raise Exception(
-                    "You will need to Stop and Start UE4 for setting.json"
-                    + " changes to apply"
+                yellow = '\u001b[33m'
+                endc = '\033[0m'
+                raise RuntimeError(
+                    f"{yellow}You will need to Stop and Start UE4 for setting.json"
+                    + f" changes to apply{endc}"
                 )
 
         # instantiate our microsoft airsim client
@@ -258,7 +294,6 @@ class AirSim(nengo.Process):
                 self.client.takeoffAsync()
             else:
                 self.client.takeoffAsync().join()
-        # self.is_paused = False
         self.is_paused = pause
         self.client.simPause(self.is_paused)
 
@@ -276,8 +311,6 @@ class AirSim(nengo.Process):
         if self.use_physics:
             self.client.enableApiControl(False)
             self.client.armDisarm(False)
-            # ext_force = self.Vector3r(0.0, 0.0, 0.0)
-            # wind_force = self.Vector3r(0.0, 0.0, 0.0)
 
         if pause:
             self.client.simPause(True)
@@ -296,8 +329,6 @@ class AirSim(nengo.Process):
 
     def make_step(self, shape_in, shape_out, dt, rng, state):
         """Create the function for the Airsim interfacing Nengo Node."""
-
-        # self.connect()
 
         def step(t, x):
             """Takes in PWM commands for 4 motors. Returns the state of the drone
@@ -453,12 +484,8 @@ class AirSim(nengo.Process):
         # reshape array to 4 channel image array H X W X 4
         img_rgb = img1d.reshape(response.height, response.width, 3)
 
-        # original image is fliped vertically
-        # img_rgb = np.flipud(img_rgb)
-
         # write to png
         airsim.write_png(os.path.normpath(save_name + ".png"), img_rgb)
-        # print('img  %s saved' % save_name)
 
     def get_state(self, name):
         """Get the state of an object, return 3D position and orientation
