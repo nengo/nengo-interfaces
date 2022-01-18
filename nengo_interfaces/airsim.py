@@ -404,7 +404,8 @@ class AirSim(nengo.Process):
                         _ = self.get_camera_feedback(
                             camera_name=self.camera_params["camera_name"],
                             save_name=(
-                                f"{self.camera_params['save_name']}/frame_{int(t*1000)}"
+                                f"{self.camera_params['save_name']}"
+                                + f"/frame_{int(t*1000):08d}"
                             ),
                         )
                     else:
