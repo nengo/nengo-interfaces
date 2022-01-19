@@ -86,7 +86,7 @@ with model:
     nengo.Connection(interface_node, ctrl[:12], synapse=None)
     # connect our target state to our controller
     nengo.Connection(target_node, ctrl[12:], synapse=None)
-    # connect our controller ouput to the interface to close the loop
+    # connect our controller output to the interface to close the loop
     nengo.Connection(ctrl, interface_node, synapse=0)
 
     # add probes for plotting
@@ -102,7 +102,7 @@ interface.disconnect()
 # Plot results
 fig = plt.figure()
 ax = fig.add_subplot(projection='3d')
-plt.title('Flight Path in NED Coordinates')
+plt.title('Flight Path in N.E.D. Coordinates')
 ax.plot(
     sim.data[target_p].T[0],
     sim.data[target_p].T[1],
