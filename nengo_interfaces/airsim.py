@@ -204,11 +204,44 @@ class AirSim(nengo.Process):
                     data.pop("Vehicles")
 
             # can turn display off for speed boost
-            if not show_display:
-                data["ViewMode"] = "NoDisplay"
-            else:
-                # fly with me for drone, spring chase for cars
-                data["ViewMode"] = ""
+            with open(  # pylint: disable=W1514
+                        f"{CUR_DIR}/cv_settings.json", "r+"
+                    ) as fp_cv:
+
+                cv_data = json.load(fp_cv)
+
+                if not show_display:
+                    # back up view mode if one exists
+                    if "ViewMode" in data.keys():
+                        # if a view mode exists that is not NoDisplay, back it up
+                        if data["ViewMode"] != "NoDisplay":
+                            cv_data["ViewMode"] = data["ViewMode"]
+                    data["ViewMode"] = "NoDisplay"
+                else:
+                    # get our default view mode that is backed up
+                    if cv_data["ViewMode"] == "NoDisplay":
+                        # depending on how someone cycles between phys and CV mode
+                        # the saved value may be NoDisplay, but intuitively we want
+                        # to see something if ViewMode = True
+                        view_mode = ""
+                    else:
+                        # user defined
+                        view_mode = cv_data["ViewMode"]
+
+                    # check if we need to change the value in settings
+                    if "ViewMode" in data.keys():
+                        # set to our backed up view mode if still on NoDisplay
+                        # otherwise leave it at the user defined ViewMode
+                        if data["ViewMode"] == "NoDisplay":
+                            data["ViewMode"] = view_mode
+                    else:
+                        # use our backed up ViewMode
+                        data["ViewMode"] = view_mode
+
+                fp_cv.seek(0)
+                json.dump(cv_data, fp_cv, indent=4)
+                fp_cv.truncate()
+
 
             # if user passes in camera params with capture settings,
             # update the settings.json
@@ -219,6 +252,8 @@ class AirSim(nengo.Process):
                         if "camera_idx" in camera_params["capture_settings"]
                         else 0
                     )
+                    # TODO
+                    #dict.get(key, return val if missing)
                     for key in camera_params["capture_settings"]:
                         data["CameraDefaults"]["CaptureSettings"][camera_idx][
                             key
@@ -262,7 +297,6 @@ class AirSim(nengo.Process):
         else:
             # controlling camera instead, so use position and orientation
             # of path planner
-            # size_in = 6
             size_in = 12
         # size_out = number of parameters in our feedback array,
         # which is of the form...
@@ -276,7 +310,7 @@ class AirSim(nengo.Process):
         ----------
         pause: boolean, Optional (Default: False)
             whether to pause on connect, sometimes if the initialization
-            of your code takes a while the drone if fall to the ground
+            of your code takes a while the drone will fall to the ground
             before your sim starts. This will instantiate the connection
             and pause until your sim starts
         """
@@ -361,12 +395,20 @@ class AirSim(nengo.Process):
                     self.fps_count += 1
                     # scale to seconds and use integers to minimize
                     # rounding issues with floats
-                    self.get_camera_feedback(
-                        camera_name=self.camera_params["camera_name"],
-                        save_name=(
-                            f"{self.camera_params['save_name']}/frame_{int(t*1000)}"
-                        ),
-                    )
+                    if self.camera_params['save_name'] is not None:
+                        img_rgb = self.get_camera_feedback(
+                            camera_name=self.camera_params["camera_name"],
+                            save_name=(
+                                f"{self.camera_params['save_name']}/frame_{int(t*1000)}"
+                            ),
+                        )
+                    else:
+                        img_rgb = self.get_camera_feedback(
+                            camera_name=self.camera_params["camera_name"],
+                            save_name=None
+                        )
+
+
 
             return np.hstack(
                 [
@@ -406,8 +448,6 @@ class AirSim(nengo.Process):
             self.client.moveByMotorPWMsAsync(pwm[0], pwm[1], pwm[2], pwm[3], self.dt)
         else:
             self.client.simPause(False)
-            # print("pwm: ", pwm)
-            # print("dt: ", self.dt)
             self.client.moveByMotorPWMsAsync(
                 pwm[0], pwm[1], pwm[2], pwm[3], self.dt
             ).join()
@@ -462,7 +502,7 @@ class AirSim(nengo.Process):
                 "angular_velocity": [0, 0, 0],
             }
 
-    def get_camera_feedback(self, camera_name="0", save_name="airsim_camera"):
+    def get_camera_feedback(self, camera_name="0", save_name=None):
         """
         Gets an image from the specified camera, and saved to save_name
 
@@ -470,7 +510,7 @@ class AirSim(nengo.Process):
         ----------
         camera_name: int, Optional (Default: 0)
             the camera index in your settings.json
-        save_name: string, Optional (Default: airsim_camera)
+        save_name: string, Optional (Default: None)
             the filename to save the image to
         """
         responses = self.client.simGetImages(
@@ -485,7 +525,10 @@ class AirSim(nengo.Process):
         img_rgb = img1d.reshape(response.height, response.width, 3)
 
         # write to png
-        airsim.write_png(os.path.normpath(save_name + ".png"), img_rgb)
+        if save_name is not None:
+            airsim.write_png(os.path.normpath(save_name + ".png"), img_rgb)
+
+        return img_rgb
 
     def get_state(self, name):
         """Get the state of an object, return 3D position and orientation

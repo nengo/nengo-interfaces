@@ -11,6 +11,11 @@ import numpy as np
 
 from nengo_interfaces.airsim import AirSim
 
+green = "\033[92m"
+yellow = "\u001b[33m"
+red = "\033[91m"
+endc = "\033[0m"
+
 # read the current capture width so we can:
 # - change it to test if we get warned, change it back
 # - test that we do not get an exception if it doesn't change
@@ -19,16 +24,17 @@ with open(  # pylint: disable=W1514
     f"{home}/Documents/AirSim/settings.json", "r+"
 ) as fp:
     data = json.load(fp)
-    prev_width = data["CameraDefaults"]["CaptureSettings"][0]["Width"]
+    try:
+        prev_width = data["CameraDefaults"]["CaptureSettings"][0]["Width"]
+    except KeyError as e:
+        print(f"{yellow}No CameraDefaults found in settings.json, using default airsim values for testing{endc}")
+        prev_width = 256
 
 
 # Test begins here
 airsim_dt = 0.01
 steps = 500
 
-green = "\033[92m"
-red = "\033[91m"
-endc = "\033[0m"
 
 # change a value in settings.json, this should throw a RuntimeError
 try:
@@ -37,7 +43,7 @@ try:
         camera_params={
             "use_physics": True,
             "fps": 1,
-            "save_name": "hi",
+            "save_name": None,
             "camera_name": 0,
             "capture_settings": {"Width": prev_width + 1},
         },
@@ -54,7 +60,7 @@ except RuntimeError as e:
             camera_params={
                 "use_physics": True,
                 "fps": 1,
-                "save_name": "hi",
+                "save_name": None,
                 "camera_name": 0,
                 "capture_settings": {"Width": prev_width},
             },
@@ -68,7 +74,7 @@ except RuntimeError as e:
             camera_params={
                 "use_physics": True,
                 "fps": 1,
-                "save_name": "hi",
+                "save_name": None,
                 "camera_name": 0,
                 "capture_settings": {"Width": prev_width},
             },

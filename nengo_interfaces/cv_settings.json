@@ -4,14 +4,14 @@
     "SimMode": "ComputerVision",
     "ClockType": "",
     "ClockSpeed": 1,
-    "ViewMode": "NoDisplay",
+    "ViewMode": "",
     "RpcEnabled": true,
     "PhysicsEngineName": "",
     "SpeedUnitFactor": 1.0,
     "SpeedUnitLabel": "m/s",
     "CameraDefaults": {
         "CaptureSettings": [
-              {
+            {
                 "ImageType": 0,
                 "Width": 960,
                 "Height": 720,
@@ -24,20 +24,22 @@
                 "TargetGamma": 0.7,
                 "ProjectionMode": "",
                 "OrthoWidth": 5.12
-              }
+            }
         ]
     },
-
     "OriginGeopoint": {
         "Latitude": 43.44241131,
         "Longitude": -80.46615243,
         "Altitude": 324
     },
     "Wind": {
-        "X": 0, "Y": 0, "Z": 0
+        "X": 0,
+        "Y": 0,
+        "Z": 0
     },
-
     "ExtForce": {
-        "X": 0, "Y": 0, "Z": 0
+        "X": 0,
+        "Y": 0,
+        "Z": 0
     }
 }

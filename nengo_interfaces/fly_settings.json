@@ -30,24 +30,7 @@
     "Vehicles": {
         "Drone1": {
             "VehicleType": "SimpleFlight",
-            "AutoCreate": true,
-            "Cameras": {
-                "high_res": {
-                    "CaptureSettings": [
-                        {
-                            "ImageType": 0,
-                            "Width": 4320,
-                            "Height": 2160
-                        }
-                    ],
-                    "X": 0.5,
-                    "Y": 0.0,
-                    "Z": 0.1,
-                    "Pitch": 0.0,
-                    "Roll": 0.0,
-                    "Yaw": 0.0
-                }
-            }
+            "AutoCreate": true
         }
     },
     "OriginGeopoint": {

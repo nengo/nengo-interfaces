@@ -108,13 +108,14 @@ ax.plot(
     sim.data[target_p].T[1],
     sim.data[target_p].T[2],
     label='target'
-    )
+)
 ax.plot(
     sim.data[state_p].T[0],
     sim.data[state_p].T[1],
     sim.data[state_p].T[2],
     label='state',
-    linestyle='--')
+    linestyle='--'
+)
 plt.legend()
 
 plt.figure()
