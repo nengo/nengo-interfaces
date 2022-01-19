@@ -14,13 +14,14 @@ from nengo_control.controllers.quadrotor import PD
 # Test begins here
 airsim_dt = 0.01
 steps = 500
+save_folder = 'test_figures'
 
 interface = AirSim(
     dt=airsim_dt,
     camera_params={
         "use_physics": False,
         "fps": 10,
-        "save_name": "test_figure",
+        "save_name": save_folder,
         "camera_name": 0,
         "Width": 960,
         "Height": 832
@@ -80,3 +81,4 @@ with nengo.Simulator(model, dt=airsim_dt) as sim:
     sim.run(steps * airsim_dt)
 
 interface.disconnect()
+print(f"Sim complete, data saved to {save_folder}")
