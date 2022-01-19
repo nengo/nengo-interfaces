@@ -26,8 +26,10 @@ with open(  # pylint: disable=W1514
     data = json.load(fp)
     try:
         prev_width = data["CameraDefaults"]["CaptureSettings"][0]["Width"]
-    except KeyError as e:
-        print(f"{yellow}No CameraDefaults found in settings.json, using default airsim values for testing{endc}")
+    except KeyError:
+        print(
+            f"{yellow}No CameraDefaults found in settings.json, using default airsim values for testing{endc}"
+        )
         prev_width = 256
 
 
@@ -49,7 +51,7 @@ try:
         },
         show_display=True,
     )
-except RuntimeError as e:
+except RuntimeError:
     print(
         f"{green}RuntimeError thrown as expected to warn user to restart UE4 sim to settings.json changes to take place, test passed{endc}"
     )
@@ -66,7 +68,7 @@ except RuntimeError as e:
             },
             show_display=True,
         )
-    except RuntimeError as e:
+    except RuntimeError:
         print(f"{green}Manually caught RuntimeError to change settings.json back{endc}")
         # set the value back to the original value
         interface = AirSim(
@@ -84,7 +86,7 @@ except RuntimeError as e:
             f"{green}No error thrown when settings.json does not change, test passed{endc}"
         )
 
-except Exception as e:
+except Exception:
     # If the runtime error was not thrown, throw an error
     raise Exception(
         f"\n{red}If you are reading this, the Airsim Interface FAILED to throw an Exception to warn the user to restart the UE4 sim for changes in settings.json to take place{endc}"

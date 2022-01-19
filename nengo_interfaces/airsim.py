@@ -205,8 +205,8 @@ class AirSim(nengo.Process):
 
             # can turn display off for speed boost
             with open(  # pylint: disable=W1514
-                        f"{CUR_DIR}/cv_settings.json", "r+"
-                    ) as fp_cv:
+                f"{CUR_DIR}/cv_settings.json", "r+"
+            ) as fp_cv:
 
                 cv_data = json.load(fp_cv)
 
@@ -242,7 +242,6 @@ class AirSim(nengo.Process):
                 json.dump(cv_data, fp_cv, indent=4)
                 fp_cv.truncate()
 
-
             # if user passes in camera params with capture settings,
             # update the settings.json
             if isinstance(camera_params, dict):
@@ -253,7 +252,7 @@ class AirSim(nengo.Process):
                         else 0
                     )
                     # TODO
-                    #dict.get(key, return val if missing)
+                    # dict.get(key, return val if missing)
                     for key in camera_params["capture_settings"]:
                         data["CameraDefaults"]["CaptureSettings"][camera_idx][
                             key
@@ -395,20 +394,18 @@ class AirSim(nengo.Process):
                     self.fps_count += 1
                     # scale to seconds and use integers to minimize
                     # rounding issues with floats
-                    if self.camera_params['save_name'] is not None:
-                        img_rgb = self.get_camera_feedback(
+                    if self.camera_params["save_name"] is not None:
+                        _ = self.get_camera_feedback(
                             camera_name=self.camera_params["camera_name"],
                             save_name=(
                                 f"{self.camera_params['save_name']}/frame_{int(t*1000)}"
                             ),
                         )
                     else:
-                        img_rgb = self.get_camera_feedback(
+                        _ = self.get_camera_feedback(
                             camera_name=self.camera_params["camera_name"],
-                            save_name=None
+                            save_name=None,
                         )
-
-
 
             return np.hstack(
                 [
