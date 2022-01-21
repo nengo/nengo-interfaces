@@ -253,6 +253,12 @@ class AirSim(nengo.Process):
                     )
                     # TODO
                     # dict.get(key, return val if missing)
+                    if "CameraDefaults" not in data.keys():
+                        data["CameraDefaults"] = cv_data["CameraDefaults"]
+                    elif "CaptureSettings" not in data["CameraDefaults"]:
+                        data["CameraDefaults"]["CaptureSettings"] = cv_data[
+                            "CameraDefaults"
+                        ]["CaptureSettings"]
                     for key in camera_params["capture_settings"]:
                         data["CameraDefaults"]["CaptureSettings"][camera_idx][
                             key
