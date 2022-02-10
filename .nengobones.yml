@@ -4,6 +4,7 @@ repo_name: nengo/nengo-interfaces
 
 description: Simplified external input and output communication
 copyright_start: 2020
+license: abr-free
 
 license_rst: {}
 
