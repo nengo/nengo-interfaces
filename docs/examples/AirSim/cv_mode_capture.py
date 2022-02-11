@@ -14,7 +14,7 @@ from nengo_control.controllers.quadrotor import PD
 # Test begins here
 airsim_dt = 0.01
 steps = 500
-save_folder = 'test_figures'
+save_folder = "test_figures"
 
 interface = AirSim(
     dt=airsim_dt,
@@ -24,7 +24,7 @@ interface = AirSim(
         "save_name": save_folder,
         "camera_name": 0,
         "Width": 960,
-        "Height": 832
+        "Height": 832,
     },
     show_display=False,
 )

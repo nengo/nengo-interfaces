@@ -290,7 +290,7 @@ class AirSim(nengo.Process):
         air_density = 1.225
         prop_diam = 0.2275
         self.max_thrust = 4.179446268
-        self.k = C_T * air_density * prop_diam ** 4
+        self.k = C_T * air_density * prop_diam**4
 
         if self.use_physics:
             # size_in = the number of rotors on our quadcopter, hardcoded

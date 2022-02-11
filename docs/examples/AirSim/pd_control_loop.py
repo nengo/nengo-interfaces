@@ -101,27 +101,27 @@ interface.disconnect()
 
 # Plot results
 fig = plt.figure()
-ax = fig.add_subplot(projection='3d')
-plt.title('Flight Path in N.E.D. Coordinates')
+ax = fig.add_subplot(projection="3d")
+plt.title("Flight Path in N.E.D. Coordinates")
 ax.plot(
     sim.data[target_p].T[0],
     sim.data[target_p].T[1],
     sim.data[target_p].T[2],
-    label='target'
+    label="target",
 )
 ax.plot(
     sim.data[state_p].T[0],
     sim.data[state_p].T[1],
     sim.data[state_p].T[2],
-    label='state',
-    linestyle='--'
+    label="state",
+    linestyle="--",
 )
 plt.legend()
 
 plt.figure()
-plt.title('Control Commands')
-plt.ylabel('Rotor Velocities [rad/sec]')
-plt.xlabel('Time [sec]')
+plt.title("Control Commands")
+plt.ylabel("Rotor Velocities [rad/sec]")
+plt.xlabel("Time [sec]")
 plt.plot(sim.trange(), sim.data[ctrl_p])
 plt.legend(["front_right", "rear_left", "front_left", "rear_right"])
 plt.show()

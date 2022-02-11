@@ -6,6 +6,8 @@ description: Simplified external input and output communication
 copyright_start: 2020
 license: abr-free
 
+main_branch: main
+
 license_rst: {}
 
 contributing_rst: {}
