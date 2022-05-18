@@ -425,7 +425,7 @@ class AirSim(nengo.Process):
 
         return step
 
-    def send_pwm_signal(self, u):
+    def send_pwm_signal(self, u, sleep_dt=False):
         """
         Send PWM controlled signals to each motor in the order
         [front_right_pwm, rear_left_pwm, front_left_pwm, rear_right_pwm]
@@ -438,6 +438,8 @@ class AirSim(nengo.Process):
             to pwm
         dt: float
             the time to run the pwm signal for
+        sleep_dt: bool, Optional (Default: False)
+            adds a sleep of length dt to run control in lock step
         """
         # the pwm output is calculated as...
         # thrust / (max_thrust * air_density_ratio)
@@ -455,7 +457,8 @@ class AirSim(nengo.Process):
             self.client.moveByMotorPWMsAsync(
                 pwm[0], pwm[1], pwm[2], pwm[3], self.dt
             ).join()
-            time.sleep(self.dt)
+            if sleep_dt:
+                time.sleep(self.dt)
             self.client.simPause(True)
 
     def get_feedback(self):
@@ -593,6 +596,10 @@ class AirSim(nengo.Process):
             ),
         )
         self.client.simSetObjectPose(name, pose, teleport=True)
+
+    def set_scale(self, name, scale):
+        scale_vec = Vector3r(scale[0], scale[1], scale[2])
+        self.client.simSetObjectScale(name, scale_vec)
 
     def set_camera_state(self, state, name=None):
         """Set the state of object given 3D location and quaternion
