@@ -77,6 +77,13 @@ class AirSim(nengo.Process):
         If true, the drone will take off and hover in the air upon connection.
         To prevent this action, set to false.
     show_display: bool, optional (Default: True)
+    sleep_dt: bool, Optional (Default: False)
+        adds a sleep of length dt to run control in lock step. When true the sim
+        will unpause, run the pwm (or move camera) command, sleep for dt seconds,
+        and then pause the sim. This allows for slower simulations to be run in the
+        background while maintaining a constant ue4 sim step.
+        NOTE: run_async has to be False, otherwise the sleep is ignored and commands
+        are run asynchronously
     """
 
     def __init__(  # noqa: C901
@@ -87,8 +94,11 @@ class AirSim(nengo.Process):
         seed=None,
         takeoff=False,
         show_display=True,
+        sleep_dt=False
     ):
+        assert not (sleep_dt and run_async), "Cannot run asynchronously and sleep for dt seconds"
         self.dt = dt
+        self.sleep_dt = sleep_dt
         # empirically determined function from recorded velocity feedback
         # from various dt the velocity feedback from airsim does not match
         # the derivative of the position feedback. See this github issue:
@@ -425,7 +435,7 @@ class AirSim(nengo.Process):
 
         return step
 
-    def send_pwm_signal(self, u, sleep_dt=False):
+    def send_pwm_signal(self, u):
         """
         Send PWM controlled signals to each motor in the order
         [front_right_pwm, rear_left_pwm, front_left_pwm, rear_right_pwm]
@@ -438,8 +448,6 @@ class AirSim(nengo.Process):
             to pwm
         dt: float
             the time to run the pwm signal for
-        sleep_dt: bool, Optional (Default: False)
-            adds a sleep of length dt to run control in lock step
         """
         # the pwm output is calculated as...
         # thrust / (max_thrust * air_density_ratio)
@@ -457,7 +465,7 @@ class AirSim(nengo.Process):
             self.client.moveByMotorPWMsAsync(
                 pwm[0], pwm[1], pwm[2], pwm[3], self.dt
             ).join()
-            if sleep_dt:
+            if self.sleep_dt:
                 time.sleep(self.dt)
             self.client.simPause(True)
 
@@ -640,7 +648,15 @@ class AirSim(nengo.Process):
                 x_val=quat[0], y_val=quat[1], z_val=quat[2], w_val=quat[3]
             ),
         )
-        self.client.simSetCameraPose(name, pose)  # , teleport=True)
+
+        if self.run_async:
+            self.client.simSetCameraPose(name, pose)  # , teleport=True)
+        else:
+            self.client.simPause(False)
+            self.client.simSetCameraPose(name, pose)  # , teleport=True)
+            if self.sleep_dt:
+                time.sleep(self.dt)
+            self.client.simPause(True)
 
     def quat_to_taitbryan(self, quat):
         """Convert quaternion to Tait-Bryan Euler angles
