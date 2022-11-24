@@ -641,6 +641,35 @@ class AirSim(nengo.Process):
         )
         self.client.simSetCameraPose(name, pose)  # , teleport=True)
 
+    def get_drone_state(self):
+        """Get the drone state as a numpy array"""
+
+        state_dict = self.get_feedback()
+        return np.hstack(
+            [
+                state_dict["position"],
+                state_dict["linear_velocity"],
+                state_dict["taitbryan"],
+                state_dict["angular_velocity"],
+            ]
+        )
+
+    def set_drone_state(self, pose, ignore_collision=True):
+        """Teleport the drone to a particular position and orientation
+
+        pose: array-like
+            First three dimensions are the x, y, and z positions
+            Second three dimensions are roll, pitch, and yaw
+        """
+
+        self.client.simSetVehiclePose(
+            pose=airsim.Pose(
+                airsim.Vector3r(pose[0], pose[1], pose[2]),
+                airsim.to_quaternion(pose[3], pose[4], pose[5])
+            ),
+            ignore_collision=ignore_collision
+        )
+
     def quat_to_taitbryan(self, quat):
         """Convert quaternion to Tait-Bryan Euler angles
 
