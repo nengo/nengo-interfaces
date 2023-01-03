@@ -14,8 +14,6 @@ contributing_rst: {}
 
 contributors_rst: {}
 
-# manifest_in:
-
 setup_py:
   install_req:
     - nengo>=3.0.0
@@ -42,18 +40,8 @@ setup_cfg:
     disable:
       - missing-module-docstring
 
-travis_yml:
-  python: 3.6
-  global_vars:
-    NUMPY: numpy
-  jobs:
-    - script: static
-  pypi_user: studywolf
-
 ci_scripts:
   - template: static
-
-codecov_yml: {}
 
 pre_commit_config_yaml: {}
 
