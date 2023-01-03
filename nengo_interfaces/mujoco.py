@@ -9,7 +9,8 @@ from mujoco_py.generated import const
 
 
 class Mujoco(nengo.Process):
-    """Provides an easy to use API for Mujoco in Nengo models.
+    """
+    Provides an easy to use API for Mujoco in Nengo models.
 
     Parameters
     ----------
@@ -51,7 +52,6 @@ class Mujoco(nengo.Process):
         input_scale=1,
         seed=None,
     ):
-
         self.xml_file = xml_file
         self.dt = dt
         self.update_display = update_display
@@ -109,7 +109,8 @@ class Mujoco(nengo.Process):
         super().__init__(size_in, size_out, default_dt=dt, seed=seed)
 
     def _connect(self, joint_names, camera_id=-1):
-        """Connect to the interface.
+        """
+        Connect to the interface.
 
         Parameters
         ----------
@@ -167,8 +168,9 @@ class Mujoco(nengo.Process):
         res = self.render_params["resolution"]
 
         def step(t, u):
-            """Takes in a set of forces. Returns the state of the robot after
-            advancing the simulation one time step.
+            """
+            Takes in a set of forces. Returns the state of the robot after advancing the
+            simulation one time step.
 
             Parameters
             ----------
@@ -190,7 +192,6 @@ class Mujoco(nengo.Process):
             # render camera feedback
             if self.render_params:
                 if timestep % self.render_params["frequency"] == 0:
-
                     for ii, jj in enumerate(self.render_params["cameras"]):
                         self.offscreen.render(res[0], res[1], camera_id=jj)
 
@@ -217,8 +218,7 @@ class Mujoco(nengo.Process):
 
     def make_node(self):
         """Create a Node that wraps the MujocoProcess for interacting with a Mujoco
-        simulation.
-        """
+        simulation."""
         return nengo.Node(
             self,
             size_in=self.default_size_in,
@@ -227,7 +227,8 @@ class Mujoco(nengo.Process):
         )
 
     def _send_forces(self, u, update_display=True):
-        """Apply the specified torque to the robot joints
+        """
+        Apply the specified torque to the robot joints.
 
         Apply the specified torque to the robot joints, move the simulation
         one time step forward, and update the position of the hand object.
@@ -250,7 +251,8 @@ class Mujoco(nengo.Process):
             self.viewer.render()
 
     def get_feedback(self):
-        """Return a dictionary of information needed by the controller.
+        """
+        Return a dictionary of information needed by the controller.
 
         Returns the joint angles and joint velocities in [rad] and [rad/sec],
         respectively.
@@ -262,7 +264,8 @@ class Mujoco(nengo.Process):
         return {"q": q, "dq": dq}
 
     def get_position(self, name, object_type="body"):
-        """Returns Cartesion position of object in world.
+        """
+        Returns Cartesion position of object in world.
 
         Parameters
         ----------
@@ -292,7 +295,8 @@ class Mujoco(nengo.Process):
         return np.copy(position)
 
     def get_orientation(self, name, object_type="body"):
-        """Returns Cartesian orientation of object in world as a rotation matrix.
+        """
+        Returns Cartesian orientation of object in world as a rotation matrix.
 
         Parameters
         ----------
@@ -310,7 +314,8 @@ class Mujoco(nengo.Process):
         return xmat.reshape(3, 3)
 
     def set_color(self, name, color, object_type="geom"):
-        """Change the color of an object.
+        """
+        Change the color of an object.
 
         Parameters
         ----------
@@ -328,7 +333,8 @@ class Mujoco(nengo.Process):
             raise NotImplementedError
 
     def set_mocap_xyz(self, name, xyz):
-        """Set the position of a Mocap object in the Mujoco environment.
+        """
+        Set the position of a Mocap object in the Mujoco environment.
 
         Parameters
         ----------
@@ -340,7 +346,8 @@ class Mujoco(nengo.Process):
         self.sim.data.set_mocap_pos(name, xyz)
 
     def set_mocap_orientation(self, name, quat):
-        """Sets the orientation of an object in the Mujoco environment
+        """
+        Sets the orientation of an object in the Mujoco environment.
 
         Sets the orientation of an object using the provided Euler angles.
         Angles must be in a relative xyz frame.

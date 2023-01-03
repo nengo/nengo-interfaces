@@ -8,7 +8,7 @@ import pyfmi
 
 class FMI(nengo.Process):
     """
-    Provides an API for FMUs in Nengo models
+    Provides an API for FMUs in Nengo models.
 
     Parameters
     ----------
@@ -30,7 +30,6 @@ class FMI(nengo.Process):
     def __init__(
         self, path, dt, debug=False, init_dict=None, input_keys=None, feedback_keys=None
     ):
-
         self.dt = dt
         self.debug = debug
         self.init_dict = init_dict
@@ -111,20 +110,16 @@ class FMI(nengo.Process):
         return result_dict
 
     def reset(self):
-        """
-        Resets the local variable tracking sim time and re-initializes the model
-        """
+        """Resets the local variable tracking sim time and re-initializes the model."""
         self.model.initialize()
         self.set_state(self.init_dict)
         self.t = 0.0
 
     def make_step(self, shape_in, shape_out, dt, rng, state):
-        """Create the function for the FMU interfacing Nengo Node"""
+        """Create the function for the FMU interfacing Nengo Node."""
 
         def step(t, x):
-            """
-            Send input, then step through the FMU sim by dt and return feedback
-            """
+            """Send input, then step through the FMU sim by dt and return feedback."""
             self.send_control(x)
 
             feedback_dict = self.get_feedback(self.feedback_keys)
@@ -134,10 +129,8 @@ class FMI(nengo.Process):
         return step
 
     def set_state(self, var_dict):
-        """
-        Accepts dict with key value pairs that match FMU variables and the value to set
-        them to.
-        """
+        """Accepts dict with key value pairs that match FMU variables and the value to
+        set them to."""
         for key in var_dict:
             self.model.set(key, var_dict[key])
 
@@ -168,9 +161,9 @@ class FMI(nengo.Process):
 
     def get_feedback(self, feedback_keys=None):
         """
-        Accepts list of strings corresponding to FMU variables,
-        and returns a dict with the string as a key and the value matching the
-        current sim value of that variable
+        Accepts list of strings corresponding to FMU variables, and returns a dict with
+        the string as a key and the value matching the current sim value of that
+        variable.
 
         Parameters
         ----------
