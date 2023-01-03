@@ -1,4 +1,5 @@
-"""Example of how to run a controller with the FMU interface in the loop.
+"""
+Example of how to run a controller with the FMU interface in the loop.
 
 NOTE: If you don't know the variables for your FMU, set debug=True, and the list of
 variables will be printed on instantiation.

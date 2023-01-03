@@ -1,4 +1,5 @@
-"""Example of how to interface a controller with an FMU.
+"""
+Example of how to interface a controller with an FMU.
 
 NOTE: If you don't know the variables for your FMU, set debug=True, and the list of
 variables will be printed on instantiation.

@@ -22,7 +22,8 @@ from airsim.types import Pose, Quaternionr, Vector3r
 
 
 class AirSim(nengo.Process):
-    """Provides an easy to use API for AirSim in Nengo models.
+    """
+    Provides an easy to use API for AirSim in Nengo models.
 
     NOTES:
     - AirSim returns quaternions in the [x, y, z, w] format. We convert this to
@@ -217,7 +218,6 @@ class AirSim(nengo.Process):
             with open(  # pylint: disable=W1514
                 f"{CUR_DIR}/cv_settings.json", "r+"
             ) as fp_cv:
-
                 cv_data = json.load(fp_cv)
 
                 if not show_display:
@@ -380,8 +380,9 @@ class AirSim(nengo.Process):
         """Create the function for the Airsim interfacing Nengo Node."""
 
         def step(t, x):
-            """Takes in PWM commands for 4 motors. Returns the state of the drone
-            after running the command.
+            """
+            Takes in PWM commands for 4 motors. Returns the state of the drone after
+            running the command.
 
             Parameters
             ----------
@@ -437,7 +438,8 @@ class AirSim(nengo.Process):
 
     def send_pwm_signal(self, u):
         """
-        Send PWM controlled signals to each motor in the order
+        Send PWM controlled signals to each motor in the order.
+
         [front_right_pwm, rear_left_pwm, front_left_pwm, rear_right_pwm]
 
         Parameters
@@ -471,8 +473,8 @@ class AirSim(nengo.Process):
 
     def get_feedback(self):
         """
-        Calls the simGetGroundTruthKinematics to get system feedback, which is
-        then parsed from the airsim custom type to a dict
+        Calls the simGetGroundTruthKinematics to get system feedback, which is then
+        parsed from the airsim custom type to a dict.
 
         returns dict of state in the form:
             {position, quaternion(in format w,x,y,z), taitbryan(euler in
@@ -519,7 +521,7 @@ class AirSim(nengo.Process):
 
     def get_camera_feedback(self, camera_name="0", save_name=None):
         """
-        Gets an image from the specified camera, and saved to save_name
+        Gets an image from the specified camera, and saved to save_name.
 
         Parameters
         ----------
@@ -546,9 +548,9 @@ class AirSim(nengo.Process):
         return img_rgb
 
     def get_state(self, name):
-        """Get the state of an object, return 3D position and orientation
-            return quaternion in order [w, x, y, z] and euler angles in
-            taitbryan format
+        """
+        Get the state of an object, return 3D position and orientation return quaternion
+        in order [w, x, y, z] and euler angles in taitbryan format.
 
         Parameters
         ----------
@@ -569,9 +571,10 @@ class AirSim(nengo.Process):
         }
 
     def set_state(self, name, xyz=None, orientation=None):
-        """Set the state of object given 3D location and quaternion
-            Accepts state position in meters and orientation in euler
-            angles in order set by euler_order in the __init__
+        """
+        Set the state of object given 3D location and quaternion Accepts state position
+        in meters and orientation in euler angles in order set by euler_order in the
+        __init__
 
         Parameters
         ----------
@@ -610,9 +613,10 @@ class AirSim(nengo.Process):
         self.client.simSetObjectScale(name, scale_vec)
 
     def set_camera_state(self, state, name=None):
-        """Set the state of object given 3D location and quaternion
-            Accepts state position in meters and orientation in euler
-            angles in order set by euler_order in the __init__
+        """
+        Set the state of object given 3D location and quaternion Accepts state position
+        in meters and orientation in euler angles in order set by euler_order in the
+        __init__
 
         Parameters
         ----------
@@ -659,7 +663,8 @@ class AirSim(nengo.Process):
             self.client.simPause(True)
 
     def quat_to_taitbryan(self, quat):
-        """Convert quaternion to Tait-Bryan Euler angles
+        """
+        Convert quaternion to Tait-Bryan Euler angles.
 
         quat : np.array
             The quaternion in [w, x, y, z] format
@@ -670,10 +675,10 @@ class AirSim(nengo.Process):
         return euler
 
     def ea_xyz_to_zxy(self, ang):
-        """Converts Euler angles from x-y-z to z-x-y convention"""
+        """Converts Euler angles from x-y-z to z-x-y convention."""
 
         def b(num):
-            """forces magnitude to be 1 or less"""
+            """forces magnitude to be 1 or less."""
             if abs(num) > 1.0:
                 return np.copysign(1.0, num)
             else:
