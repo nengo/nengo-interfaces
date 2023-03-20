@@ -13,6 +13,12 @@ from abr_control.utils import transformations as transform
 import airsim
 from airsim.types import Pose, Quaternionr, Vector3r
 
+# Only one optional function requires OpenCV, so only print a warning if it is not installed
+try:
+    import cv2
+except ImportError:
+    print("WARNING: could not import cv2, AirSim.get_camera_image() will not support resizing")
+
 # https://github.com/microsoft/AirSim/blob/b7a65bb7f7a9471a2ec0ce6f573512b880d3197a/PythonClient/airsim/client.py#L679
 
 # Additional AirSim functions for applying arbitrary forces
@@ -639,6 +645,35 @@ class AirSim(nengo.Process):
         )
         self.client.simSetCameraPose(name, pose)  # , teleport=True)
 
+    def get_drone_state(self):
+        """Get the drone state as a numpy array"""
+
+        state_dict = self.get_feedback()
+        return np.hstack(
+            [
+                state_dict["position"],
+                state_dict["linear_velocity"],
+                state_dict["taitbryan"],
+                state_dict["angular_velocity"],
+            ]
+        )
+
+    def set_drone_state(self, pose, ignore_collision=True):
+        """Teleport the drone to a particular position and orientation
+
+        pose: array-like
+            First three dimensions are the x, y, and z positions
+            Second three dimensions are roll, pitch, and yaw
+        """
+
+        self.client.simSetVehiclePose(
+            pose=airsim.Pose(
+                airsim.Vector3r(pose[0], pose[1], pose[2]),
+                airsim.to_quaternion(pose[3], pose[4], pose[5])
+            ),
+            ignore_collision=ignore_collision
+        )
+
     def quat_to_taitbryan(self, quat):
         """
         Convert quaternion to Tait-Bryan Euler angles.
@@ -682,3 +717,175 @@ class AirSim(nengo.Process):
 
         roll = math.asin(b((c3 * s1 + c1 * s2 * s3) / cp))  # flipped
         return [roll, pitch, yaw]
+
+    def get_camera_images(
+            self,
+            image_shape=(144, 256),
+            normalize=False,
+            depth_camera=False,
+            back_camera=False,
+            depth_max=50,
+            objects_to_hide=None,
+            hidden_depth=100
+    ):
+        """Returns images from the drone after applying the specified processing options.
+        The return format is a dictionary with the names of the images as keys and numpy arrays as values.
+        Between 1 and 4 images are returned depending on the parameter settings, the possible names are:
+        "front_rgb", "back_rgb", "front_depth", and "back_depth"
+
+        Parameters
+        ----------
+        image_shape: tuple (Default: (144, 256))
+            Height and width of the output images.
+            If the AirSim camera settings are different, the images will be resized
+        normalize: boolean (Default: False)
+            If set to True, normalize the pixel values in the returned images to be between -1 and 1
+        depth_camera: boolean (Default: False)
+            If set to True, include a depth image along with RGB
+        back_camera: boolean (Default: False)
+            If set to True, capture images from both a front facing and back facing camera
+        depth_max: float (Default: 50)
+            The maximum that all depth values are clipped to when a depth camera is used.
+            Also influences the logarithmic normalize if normalize is set to True
+        objects_to_hide: list of str, or None (Default: None)
+            An optional list of object names to move out of the scene before capturing an image
+            and then move back again to continue simulation. The main use case are objects such as arrows and spheres
+            for visualizing locations and directions that should not be seen by the camera.
+        hidden_depth: float (Default: 100)
+            When hiding objects, the z-value that they will all get moved to
+        """
+
+        camera_names = ["0"]
+
+        if back_camera:
+            camera_names.append("4")
+
+        if objects_to_hide is not None:
+            object_states = {}
+            for object_name in objects_to_hide:
+                # store original position
+                object_states[object_name] = self.get_state(name=object_name)
+                # move under ground
+                self.set_state(
+                    name=object_name,
+                    xyz=(0, 0, hidden_depth),
+                    orientation=object_states[object_name]["taitbryan"]
+                )
+
+        # the requests to AirSim
+        requests = []
+
+        # types of each image, either rgb or depth
+        image_types = []
+
+        # the processed images
+        images = {}
+
+        for camera_name in camera_names:
+            requests.append(airsim.ImageRequest(camera_name, airsim.ImageType.Scene, False, False))
+            if camera_name == "0":
+                image_types.append("front_rgb")
+            elif camera_name == "4":
+                image_types.append("back_rgb")
+            else:
+                raise NotImplementedError()
+            if depth_camera:
+                requests.append(airsim.ImageRequest(camera_name, airsim.ImageType.DepthPerspective, True, False))
+                if camera_name == "0":
+                    image_types.append("front_depth")
+                elif camera_name == "4":
+                    image_types.append("back_depth")
+                else:
+                    raise NotImplementedError()
+
+        responses = self.client.simGetImages(requests)
+
+        if objects_to_hide is not None:
+            for object_name in objects_to_hide:
+                # move back to original position
+                self.set_state(
+                    name=object_name,
+                    xyz=object_states[object_name]["position"],
+                    orientation=object_states[object_name]["taitbryan"]
+                )
+
+        for response, image_type in zip(responses, image_types):
+            images[image_type] = self.process_image_response(
+                response, image_shape=image_shape, image_type=image_type, normalize=normalize, depth_max=depth_max
+            )
+
+        return images
+
+    @staticmethod
+    def process_image_response(response, image_shape=(144, 256), image_type="rgb", normalize=False, depth_max=50):
+        """Processes an image response from AirSim. Returns a numpy array.
+
+        Parameters
+        ----------
+        image_shape: tuple (Default: (144, 256))
+            Height and width of the output images.
+            If the AirSim camera settings are different, the images will be resized
+        image_type: str
+            A string containing either "rgb" or "depth" to indicate the type of image being processed
+        normalize: boolean (Default: False)
+            If set to True, normalize the pixel values in the returned images to be between -1 and 1
+        depth_max: float (Default: 50)
+            The maximum that all depth values are clipped to when a depth camera is used.
+            Also influences the logarithmic normalize if normalize is set to True
+        """
+        if "rgb" in image_type:
+            # get numpy array
+            img1d = np.fromstring(response.image_data_uint8, dtype=np.uint8)
+
+            # reshape array to 4 channel image array H X W X 4
+            img_rgb = img1d.reshape(response.height, response.width, 3)
+
+            # original image is flipped vertically
+            img_rgb = np.flipud(img_rgb)
+
+            # Optional resize
+            if response.height != image_shape[0] or response.width != image_shape[1]:
+                # Note: shape needs to be reversed in 'dsize' and the output will be changed to BGR from RGB
+                img_rgb = cv2.resize(
+                    img_rgb,
+                    dsize=(image_shape[1], image_shape[0]),
+                    interpolation=cv2.INTER_CUBIC
+                )
+
+            # Change from BGR to RGB
+            img_rgb = img_rgb[:, :, ::-1]
+
+            if normalize:
+                img_rgb = img_rgb.astype("float32")
+                img_rgb /= (255 / 2.)
+                img_rgb -= 1
+
+            return img_rgb
+        elif "depth" in image_type:
+            img_depth = airsim.list_to_2d_float_array(response.image_data_float, response.width, response.height)
+            img_depth = img_depth.reshape(response.height, response.width, 1)
+
+            # original image is flipped vertically
+            img_depth = np.flipud(img_depth)
+
+            # Optional resize
+            if response.height != image_shape[0] or response.width != image_shape[1]:
+                # Note: shape needs to be reversed in 'dsize' and the output will be changed to BGR from RGB
+                img_depth = cv2.resize(
+                    img_depth,
+                    dsize=(image_shape[1], image_shape[0]),
+                    interpolation=cv2.INTER_CUBIC
+                )
+
+            img_depth = np.clip(np.abs(img_depth), 0, depth_max)
+
+            if normalize:
+                img_depth = img_depth.astype("float32")
+                img_depth = (2 * np.log(img_depth + 1) / np.log(depth_max)) - 1
+
+            # resize removes the last dimension, need to reshape again to get it back
+            img_depth = img_depth.reshape(image_shape[0], image_shape[1], 1)
+
+            return img_depth
+        else:
+            raise ValueError(f"Image type must contain 'rgb' or 'depth', but received: {image_type}")
