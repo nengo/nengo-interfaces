@@ -95,9 +95,11 @@ class AirSim(nengo.Process):
         seed=None,
         takeoff=False,
         show_display=True,
-        sleep_dt=False
+        sleep_dt=False,
     ):
-        assert not (sleep_dt and run_async), "Cannot run asynchronously and sleep for dt seconds"
+        assert not (
+            sleep_dt and run_async
+        ), "Cannot run asynchronously and sleep for dt seconds"
         self.dt = dt
         self.sleep_dt = sleep_dt
         # empirically determined function from recorded velocity feedback
@@ -706,9 +708,11 @@ class AirSim(nengo.Process):
         roll = math.asin(b((c3 * s1 + c1 * s2 * s3) / cp))  # flipped
         return [roll, pitch, yaw]
 
+
 # obtained from https://microsoft.github.io/AirSim/seg_rgbs.txt
 # color map used for setting segmentation colors and IDs in Airsim
 ID_TO_COLOR_MAP = {100: [185, 243, 231]}
+
 
 def retry(img_func, n_tries=3):
     """
