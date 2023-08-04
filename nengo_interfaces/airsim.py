@@ -700,3 +700,200 @@ class AirSim(nengo.Process):
 
         roll = math.asin(b((c3 * s1 + c1 * s2 * s3) / cp))  # flipped
         return [roll, pitch, yaw]
+
+# obtained from https://microsoft.github.io/AirSim/seg_rgbs.txt
+# color map used for setting segmentation colors and IDs in Airsim
+ID_TO_COLOR_MAP = {100: [185, 243, 231]}
+
+def retry(img_func, n_tries=3):
+    """
+    Wrapper function to retry Airsim image feedback function 3 times in the event
+    of a client error. Should be able to handle erroneous situation where Airsim returns
+    empty image.
+
+    Parameters:
+    -----------
+    img_func : function
+        A function that returns an image of shape (H,W,C) obtained by airsim.client.simGetImages()
+    n_tries : int
+        Number of attemps to run the function
+
+    Returns:
+    --------
+    wrapper : function
+        A wrapped function that checks if the returned image is empty and retries if that
+        is the case
+    """
+
+    def wrapper(*args):
+        for _ in range(n_tries):
+            img_return = img_func(*args)
+            if img_return.shape[0] != 0 and img_return.shape[1] != 0:
+                return img_return
+        return None
+
+    return wrapper
+
+
+class CaptureSingleTargetXYDepth(AirSim):
+    """
+    Extend the AirSim interface to capture pixel location and depth camera feedback
+    for a single UE4 character/object target. The character/object is chosen
+    at random from objects tagged with a specific wildcard (i.e. ABR).
+
+    To be used inside of an Airsim simulation loop.
+
+    Attributes:
+    ----------
+    seg_id : int
+        An integer corresponding to the Airsim segmentation ID of interest
+    """
+
+    def __init__(self, seg_id=100, **kwargs):
+        super(CaptureSingleTargetXYDepth, self).__init__(**kwargs)
+        self.seg_id = seg_id
+        self.reset()
+
+    def reset(self):
+        self.images = []
+        self.ground_truth = []
+
+    def set_target_tag(self, target_tag):
+        """
+        Sets the class variable for the object's UE4 nametag.
+        Also collects the initial pose (location) to return
+        the object to that location when it's no longer needed.
+        """
+
+        self.target_tag = target_tag
+        self.reset_pose = self.client.simGetObjectPose(self.target_tag)
+
+    def prepare_segmentation(self):
+        """Sets the segmentation ID for the specified target"""
+
+        success = self.client.simSetSegmentationObjectID(
+            self.target_tag, self.seg_id, is_name_regex=True
+        )
+        assert success
+
+    def test_line_of_sight(self, pixel_threshold=20):
+        """
+        Utility function that checks if the camera, at its current position,
+        can identify the target object within it's field of view from a
+        segmentation image.
+        """
+
+        # Get a segmentation image from Airsim
+        seg_img_bgr = self.segmentation_feedback()
+        seg_img_rgb = seg_img_bgr[:, :, ::-1]
+
+        # Check if any pixels in the segmentation image match the
+        # target objects segmention ID/colour
+        mask = np.all(
+            seg_img_rgb == np.expand_dims(ID_TO_COLOR_MAP[self.seg_id], axis=(0, 1)),
+            axis=2,
+        )
+
+        # The number of target object pixels located in the segmentation image
+        # can be found by summing the mask
+        n_pixels = np.sum(mask)
+
+        # If the number of pixels is greater than the threshold value, we say
+        # the target object is in frame
+        if n_pixels > pixel_threshold:
+            return True
+
+        return False
+
+    @retry
+    def segmentation_feedback(self, camera_name="0"):
+        """
+        Function to obtain segmentation image feedback from the Airsim
+        client
+        """
+        # obtain segmentation image at current step
+        seg_img = self.client.simGetImages(
+            [
+                airsim.ImageRequest(
+                    camera_name, airsim.ImageType.Segmentation, False, False
+                )
+            ]
+        )[0]
+
+        # reshape segmented rgb image to 3 channel image array H X W X 3
+        seg_img1d = np.fromstring(seg_img.image_data_uint8, dtype=np.uint8)
+        seg_img_rgb = seg_img1d.reshape(seg_img.height, seg_img.width, 3)
+        return seg_img_rgb
+
+    @retry
+    def depth_feedback(self, camera_name="0"):
+        """
+        Function to obtain depth image feedback from the Airsim
+        client
+        """
+        # obtain planar depth information at current step
+        dep_img = self.client.simGetImages(
+            [
+                airsim.ImageRequest(
+                    camera_name, airsim.ImageType.DepthPlanar, True, False
+                )
+            ]
+        )[0]
+
+        # reshape planar depth images into float array H X W
+        depth_img1d = np.array(dep_img.image_data_float).astype(np.float32)
+        depth_img = depth_img1d.reshape(dep_img.height, dep_img.width)
+        return depth_img
+
+    def capture_step(self, segmentation_threshold=16):
+        """
+        Funcation that will collect rgb camera, segmentation camera, and
+        depth camera feedback utilizing the configured nengo Airsim interface.
+
+        This function should be called inside an Airsim simulation loop, where
+        image and ground truth information is captured every time this function
+        is called.
+
+        Parameters:
+        -----------
+        segmentation_threshold : int
+            Number of pixels returned by segmentation ID that
+            is accetable for identifying the ground truth
+            location.
+
+        """
+        # obtain default camera image at current step
+        camera_feedback = self.get_camera_feedback()
+
+        # get segmentation feedback
+        seg_img_bgr = self.segmentation_feedback()
+
+        # get depth feedback
+        depth_img = self.depth_feedback()
+
+        # Check if any pixels in the segmentation image match the
+        # target objects segmention ID/colour
+        mask = np.all(
+            seg_img_bgr[:, :, ::-1]
+            == np.expand_dims(ID_TO_COLOR_MAP[self.seg_id], axis=(0, 1)),
+            axis=2,
+        )
+        object_in_view = np.any(mask)
+
+        # If no pixels match or the number of pixels is below the threshold,
+        # set the ground truth location to sentinel value of -1
+        if not object_in_view or np.sum(mask) < segmentation_threshold:
+            # if the object is not in the camera capture, then set the center
+            # to be some dummy value
+            true_loc = np.array([-1, -1, -1])
+        else:
+            # calculate centre of mass of pixels in segmentation image
+            center = np.mean(np.argwhere(mask), axis=0).astype(int)
+            if depth_img is None:
+                depth = -1
+            else:
+                depth = depth_img[center[0], center[1]]
+            true_loc = np.array([center[0], center[1], depth]).astype(np.float32)
+
+        self.images.append(camera_feedback)
+        self.ground_truth.append(true_loc)
