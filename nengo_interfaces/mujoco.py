@@ -8,6 +8,8 @@ from abr_control.utils import transformations
 
 import nengo
 
+class ExitSim(Exception):
+    pass
 
 class Mujoco(nengo.Process):
     """An interface for MuJoCo.
@@ -30,7 +32,7 @@ class Mujoco(nengo.Process):
         If True, store the input that is passed in to the Node in self.input_track.
     render_params : dict
         'cameras' : list
-            the order the camera output is appended in
+            camera id, the order the camera output is appended in
         'resolution' : list
             the resolution to return
         'update_frequency' : int, optional (Default: 1)
@@ -82,8 +84,6 @@ class Mujoco(nengo.Process):
             self.image = np.zeros(self.subpixels)
             if "frequency" not in self.render_params.keys():
                 self.render_params["frequency"] = 1
-            if "plot_frequency" not in self.render_params.keys():
-                self.render_params["plot_frequency"] = None
 
     def connect(self, joint_names=None, camera_id=-1):
         """
@@ -133,7 +133,6 @@ class Mujoco(nengo.Process):
 
         # give the robot config access to the sim for wrapping the
         # forward kinematics / dynamics functions
-        # print(f"\n\n\n{self.joint_dyn_addrs=}\n\n\n")
         print("Connecting to robot config...")
         self.robot_config._connect(
             self.model,
@@ -148,8 +147,10 @@ class Mujoco(nengo.Process):
             # set the default display to skip frames to speed things up
             self.viewer._render_every_frame = False
 
-        # if we want to use the offscreen render context create it before the
-        # viewer so the corresponding window is behind the viewer
+            if camera_id > -1:
+                self.viewer.cam.fixedcamid = camera_id
+                self.viewer.cam.type = mujoco.mjtCamera.mjCAMERA_FIXED
+
         if self.render_params is not None:
             self.offscreen = mujoco_viewer.MujocoViewer(
                 self.model,
@@ -162,7 +163,8 @@ class Mujoco(nengo.Process):
             self.offscreen._render_every_frame = False
 
         # size in = the number of actuators defined
-        size_in = self.model.nu
+        # size_in = self.model.nu
+        size_in = len(self.joint_pos_addrs)
         # size out = the number of joints we're getting feedback from x2 (pos, vel)
         size_out = len(self.joint_pos_addrs) * 2 + int(np.product(self.image.shape))
 
@@ -202,7 +204,9 @@ class Mujoco(nengo.Process):
 
     def make_step(self, shape_in, shape_out, dt, rng, state):
         """Create the function for the Mujoco interfacing Nengo Node."""
-        res = self.render_params["resolution"]
+
+        if self.render_params:
+            res = self.render_params["resolution"]
 
         def step(t, u):
             """
@@ -279,17 +283,6 @@ class Mujoco(nengo.Process):
         # move simulation ahead one time step
         mujoco.mj_step(self.model, self.data)
 
-        # TODO need to check config to see if robot has a gripper defined
-        # if "EE" in self.robot_config.data.body:
-        #     # Update position of hand object
-        #     feedback = self.get_feedback()
-        #     hand_xyz = self.robot_config.Tx(name="EE", q=feedback["q"])
-        #     self.set_mocap_xyz("hand", hand_xyz)
-        #
-        #     # Update orientation of hand object
-        #     hand_quat = self.robot_config.quaternion(name="EE", q=feedback["q"])
-        #     self.set_mocap_orientation("hand", hand_quat)
-
         if self.display_frequency > 0 and update_display:
             if self.render_params:
                 glfw.make_context_current(self.viewer.window)
@@ -307,8 +300,8 @@ class Mujoco(nengo.Process):
         name: string
             name of the body to apply the force to
         """
-        raise NotImplementedError
-        # self.sim.data.xfrc_applied[self.model.body_name2id(name)] = u_ext
+        bodyid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "EE")
+        self.data.xfrc_applied[bodyid] = u_ext
 
     def send_target_angles(self, q):
         """Move the robot to the specified configuration.
@@ -356,17 +349,19 @@ class Mujoco(nengo.Process):
             type of object you want the xyz position of
             Can be: body, geom, site
         """
-        if object_type == "body":
+        if object_type == "mocap":  # commonly queried to find target
+            mocap_id = self.model.body(name).mocapid
+            xyz = self.data.mocap_pos[mocap_id]
+        elif object_type == "body":
             xyz = self.data.body(name).xpos
         elif object_type == "geom":
             xyz = self.data.geom(name).xpos
         elif object_type == "site":
-            # xyz = self.data.site(name).xpos
-            # xyz = self.sim.data.get_site_xpos(name)
-            raise NotImplementedError
+            xyz = self.data.site(name).xpos
         elif object_type == "camera":
-            # xyz = self.sim.data.get_camera_xpos(name)
-            raise NotImplementedError
+            xyz = self.data.camera(name).xpos
+        elif object_type == "joint":
+            xyz = self.model.jnt(name).pos
         else:
             raise Exception(f"get_xyz for {object_type} object type not supported")
 
@@ -384,8 +379,8 @@ class Mujoco(nengo.Process):
             Can be: body, geom, site
         """
         if object_type == "mocap":  # commonly queried to find target
-            # quat = self.sim.data.get_mocap_quat(name)
-            raise NotImplementedError
+            mocap_id = self.model.body(name).mocapid
+            quat = self.data.mocap_quat[mocap_id]
         elif object_type == "body":
             quat = self.data.body(name).xquat
         elif object_type == "geom":
@@ -395,9 +390,8 @@ class Mujoco(nengo.Process):
             xmat = self.data.site(name).xmat
             quat = transformations.quaternion_from_matrix(xmat.reshape((3, 3)))
         elif object_type == "camera":
-            # xmat = self.sim.data.get_camera_xmat(name)
-            # quat = transformations.quaternion_from_matrix(xmat.reshape((3, 3)))
-            raise NotImplementedError
+            xmat = self.data.camera(name).xmat
+            quat = transformations.quaternion_from_matrix(xmat.reshape((3, 3)))
         else:
             raise Exception(
                 f"get_orientation for {object_type} object type not supported"
