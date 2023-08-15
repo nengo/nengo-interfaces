@@ -157,7 +157,7 @@ class FMI(nengo.Process):
         self.t += self.dt
 
         if status != pyfmi.fmi.FMI_OK:
-            raise Exception("ERROR IN do_step")
+            raise ValueError("ERROR IN do_step")
 
     def get_feedback(self, feedback_keys=None):
         """

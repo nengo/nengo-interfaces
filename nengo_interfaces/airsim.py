@@ -611,6 +611,7 @@ class AirSim(nengo.Process):
         self.client.simSetObjectPose(name, pose, teleport=True)
 
     def set_scale(self, name, scale):
+        """Sets the scale of a named object."""
         scale_vec = Vector3r(scale[0], scale[1], scale[2])
         self.client.simSetObjectScale(name, scale_vec)
 
@@ -680,7 +681,7 @@ class AirSim(nengo.Process):
         """Converts Euler angles from x-y-z to z-x-y convention."""
 
         def b(num):
-            """forces magnitude to be 1 or less."""
+            """Forces magnitude to be 1 or less."""
             if abs(num) > 1.0:
                 return np.copysign(1.0, num)
             else:
@@ -716,22 +717,23 @@ ID_TO_COLOR_MAP = {100: [185, 243, 231]}
 
 def retry(img_func, n_tries=3):
     """
-    Wrapper function to retry Airsim image feedback function 3 times in the event
-    of a client error. Should be able to handle erroneous situation where Airsim returns
+    Wrapper function to retry Airsim image feedback function 3 times in the event of a
+    client error. Should be able to handle erroneous situation where Airsim returns
     empty image.
 
     Parameters:
     -----------
     img_func : function
-        A function that returns an image of shape (H,W,C) obtained by airsim.client.simGetImages()
+        A function that returns an image of shape (H,W,C) obtained by
+        airsim.client.simGetImages()
     n_tries : int
-        Number of attemps to run the function
+        Number of attempts to run the function
 
     Returns:
     --------
     wrapper : function
-        A wrapped function that checks if the returned image is empty and retries if that
-        is the case
+        A wrapped function that checks if the returned image is empty and
+        retries if that is the case
     """
 
     def wrapper(*args):
@@ -746,9 +748,9 @@ def retry(img_func, n_tries=3):
 
 class CaptureSingleTargetXYDepth(AirSim):
     """
-    Extend the AirSim interface to capture pixel location and depth camera feedback
-    for a single UE4 character/object target. The character/object is chosen
-    at random from objects tagged with a specific wildcard (i.e. ABR).
+    Extend the AirSim interface to capture pixel location and depth camera feedback for
+    a single UE4 character/object target. The character/object is chosen at random from
+    objects tagged with a specific wildcard (i.e. ABR).
 
     To be used inside of an Airsim simulation loop.
 
@@ -759,26 +761,28 @@ class CaptureSingleTargetXYDepth(AirSim):
     """
 
     def __init__(self, seg_id=100, **kwargs):
-        super(CaptureSingleTargetXYDepth, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.seg_id = seg_id
         self.reset()
 
     def reset(self):
+        """Reset the image and ground truth cache."""
         self.images = []
         self.ground_truth = []
 
     def set_target_tag(self, target_tag):
         """
         Sets the class variable for the object's UE4 nametag.
-        Also collects the initial pose (location) to return
-        the object to that location when it's no longer needed.
+
+        Also collects the initial pose (location) to return the object to that
+        location when it's no longer needed.
         """
 
         self.target_tag = target_tag
         self.reset_pose = self.client.simGetObjectPose(self.target_tag)
 
     def prepare_segmentation(self):
-        """Sets the segmentation ID for the specified target"""
+        """Sets the segmentation ID for the specified target."""
 
         success = self.client.simSetSegmentationObjectID(
             self.target_tag, self.seg_id, is_name_regex=True
@@ -786,11 +790,9 @@ class CaptureSingleTargetXYDepth(AirSim):
         assert success
 
     def test_line_of_sight(self, pixel_threshold=20):
-        """
-        Utility function that checks if the camera, at its current position,
-        can identify the target object within it's field of view from a
-        segmentation image.
-        """
+        """Utility function that checks if the camera, at its current position, can
+        identify the target object within it's field of view from a segmentation
+        image."""
 
         # Get a segmentation image from Airsim
         seg_img_bgr = self.segmentation_feedback()
@@ -816,10 +818,7 @@ class CaptureSingleTargetXYDepth(AirSim):
 
     @retry
     def segmentation_feedback(self, camera_name="0"):
-        """
-        Function to obtain segmentation image feedback from the Airsim
-        client
-        """
+        """Function to obtain segmentation image feedback from the Airsim client."""
         # obtain segmentation image at current step
         seg_img = self.client.simGetImages(
             [
@@ -836,10 +835,7 @@ class CaptureSingleTargetXYDepth(AirSim):
 
     @retry
     def depth_feedback(self, camera_name="0"):
-        """
-        Function to obtain depth image feedback from the Airsim
-        client
-        """
+        """Function to obtain depth image feedback from the Airsim client."""
         # obtain planar depth information at current step
         dep_img = self.client.simGetImages(
             [
@@ -856,8 +852,8 @@ class CaptureSingleTargetXYDepth(AirSim):
 
     def capture_step(self, segmentation_threshold=16):
         """
-        Funcation that will collect rgb camera, segmentation camera, and
-        depth camera feedback utilizing the configured nengo Airsim interface.
+        Function that will collect rgb camera, segmentation camera, and depth camera
+        feedback utilizing the configured nengo Airsim interface.
 
         This function should be called inside an Airsim simulation loop, where
         image and ground truth information is captured every time this function
@@ -867,9 +863,8 @@ class CaptureSingleTargetXYDepth(AirSim):
         -----------
         segmentation_threshold : int
             Number of pixels returned by segmentation ID that
-            is accetable for identifying the ground truth
+            is acceptable for identifying the ground truth
             location.
-
         """
         # obtain default camera image at current step
         camera_feedback = self.get_camera_feedback()

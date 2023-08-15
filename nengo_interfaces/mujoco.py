@@ -1,18 +1,21 @@
 import glfw
-import matplotlib.pyplot as plt
-import mujoco
 import mujoco_viewer
+import nengo
 import numpy as np
-
 from abr_control.utils import transformations
 
-import nengo
+import mujoco
+
 
 class ExitSim(Exception):
-    pass
+    """A way of exiting the nengo sim early."""
+
+    print("Exiting sim")
+
 
 class Mujoco(nengo.Process):
-    """An interface for MuJoCo.
+    """
+    An interface for MuJoCo.
 
     Parameters
     ----------
@@ -173,34 +176,41 @@ class Mujoco(nengo.Process):
         print("MuJoCo session created")
 
     def disconnect(self):
-        """Stop and reset the simulation"""
+        """Stop and reset the simulation."""
         if self.display_frequency > 0:
             self.viewer.close()
 
         print("MuJoCO session closed...")
 
     def get_joint_pos_addrs(self, jntadr):
-        # store the data.qpos indices associated with this joint
+        """Store the data.qpos indices associated with this joint."""
         first_pos = self.model.jnt_qposadr[jntadr]
         posvec_length = self.robot_config.JNT_POS_LENGTH[self.model.jnt_type[jntadr]]
         joint_pos_addr = list(range(first_pos, first_pos + posvec_length))[::-1]
         return joint_pos_addr
 
     def get_joint_vel_addrs(self, jntadr):
-        # store the data.qvel indices associated with this joint
+        """Store the data.qvel indices associated with this joint."""
         first_vel = self.model.jnt_dofadr[jntadr]
         velvec_length = self.robot_config.JNT_DYN_LENGTH[self.model.jnt_type[jntadr]]
         joint_vel_addr = list(range(first_vel, first_vel + velvec_length))[::-1]
         return joint_vel_addr
 
     def get_joint_dyn_addrs(self, jntadr):
-        # store the .ctrl indices associated with this joint
+        """Store the .ctrl indices associated with this joint."""
+        first_dyn = None
         for first_dyn, v in enumerate(self.model.actuator_trnid):
             if v[0] == jntadr:
                 break
-        dynvec_length = self.robot_config.JNT_DYN_LENGTH[self.model.jnt_type[jntadr]]
-        joint_dyn_addr = list(range(first_dyn, first_dyn + dynvec_length))[::-1]
-        return joint_dyn_addr
+
+        if first_dyn is None:
+            raise ValueError("Need at least one actuator")
+        else:
+            dynvec_length = self.robot_config.JNT_DYN_LENGTH[
+                self.model.jnt_type[jntadr]
+            ]
+            joint_dyn_addr = list(range(first_dyn, first_dyn + dynvec_length))[::-1]
+            return joint_dyn_addr
 
     def make_step(self, shape_in, shape_out, dt, rng, state):
         """Create the function for the Mujoco interfacing Nengo Node."""
@@ -262,8 +272,9 @@ class Mujoco(nengo.Process):
         )
 
     def _send_forces(self, u, update_display=True, use_joint_dyn_addrs=True):
-        """Apply the specified torque to the robot joints, move the simulation
-        one time step forward, and update the position of the hand object.
+        """
+        Apply the specified torque to the robot joints, move the simulation one time
+        step forward, and update the position of the hand object.
 
         Parameters
         ----------
@@ -291,7 +302,8 @@ class Mujoco(nengo.Process):
                 glfw.make_context_current(None)
 
     def set_external_force(self, name, u_ext):
-        """Applies an external force to a specified body
+        """
+        Applies an external force to a specified body.
 
         Parameters
         ----------
@@ -304,7 +316,8 @@ class Mujoco(nengo.Process):
         self.data.xfrc_applied[bodyid] = u_ext
 
     def send_target_angles(self, q):
-        """Move the robot to the specified configuration.
+        """
+        Move the robot to the specified configuration.
 
         Parameters
         ----------
@@ -316,7 +329,8 @@ class Mujoco(nengo.Process):
         mujoco.mj_forward(self.model, self.data)
 
     def set_joint_state(self, q, dq):
-        """Move the robot to the specified configuration.
+        """
+        Move the robot to the specified configuration.
 
         Parameters
         ----------
@@ -332,8 +346,7 @@ class Mujoco(nengo.Process):
 
     def get_feedback(self):
         """Returns the joint angles and joint velocities in [rad] and [rad/sec],
-        respectively, in a dictionary.
-        """
+        respectively, in a dictionary."""
 
         self.q = np.copy(self.data.qpos[self.joint_pos_addrs])
         self.dq = np.copy(self.data.qvel[self.joint_vel_addrs])
@@ -341,7 +354,8 @@ class Mujoco(nengo.Process):
         return {"q": self.q, "dq": self.dq}
 
     def get_xyz(self, name, object_type="body"):
-        """Returns the xyz position of the specified object
+        """
+        Returns the xyz position of the specified object.
 
         name: string
             name of the object you want the xyz position of
@@ -363,12 +377,13 @@ class Mujoco(nengo.Process):
         elif object_type == "joint":
             xyz = self.model.jnt(name).pos
         else:
-            raise Exception(f"get_xyz for {object_type} object type not supported")
+            raise ValueError(f"get_xyz for {object_type} object type not supported")
 
         return np.copy(xyz)
 
     def get_orientation(self, name, object_type="body"):
-        """Returns the orientation of an object as the [w x y z] quaternion [radians]
+        """
+        Returns the orientation of an object as the [w x y z] quaternion [radians]
 
         Parameters
         ----------
@@ -393,13 +408,14 @@ class Mujoco(nengo.Process):
             xmat = self.data.camera(name).xmat
             quat = transformations.quaternion_from_matrix(xmat.reshape((3, 3)))
         else:
-            raise Exception(
+            raise ValueError(
                 f"get_orientation for {object_type} object type not supported"
             )
         return np.copy(quat)
 
     def set_mocap_xyz(self, name, xyz):
-        """Set the position of a mocap object in the Mujoco environment.
+        """
+        Set the position of a mocap object in the Mujoco environment.
 
         name: string
             the name of the object
@@ -411,7 +427,8 @@ class Mujoco(nengo.Process):
         mujoco.mj_forward(self.model, self.data)
 
     def set_mocap_orientation(self, name, quat):
-        """Sets the orientation of an object in the Mujoco environment
+        """
+        Sets the orientation of an object in the Mujoco environment.
 
         Sets the orientation of an object using the provided Euler angles.
         Angles must be in a relative xyz frame.
@@ -428,7 +445,8 @@ class Mujoco(nengo.Process):
         mujoco.mj_forward(self.model, self.data)
 
     def set_state(self, name, xyz=None, quat=None):
-        """Sets the state of an object attached to the world with a free joint.
+        """
+        Sets the state of an object attached to the world with a free joint.
 
         Parameters
         ----------
@@ -456,24 +474,5 @@ class Mujoco(nengo.Process):
             # set the new orientation
             self.data.qpos[jnt_qpos_adr + 3 : jnt_qpos_adr + 7] = quat
 
-        # run mj_forward to propogate the change immediately
+        # run mj_forward to propagate the change immediately
         mujoco.mj_forward(self.model, self.data)
-
-    def set_color(self, name, color, object_type="geom"):
-        """
-        Change the color of an object.
-
-        Parameters
-        ----------
-        name : string
-            The name of the object.
-        color : list
-            The [r, g, b, a] to set.
-        object_type : string
-            The type of object.
-        """
-        if object_type == "geom":
-            geom_id = self.model.geom_name2id(name)
-            self.model.geom_rgba[geom_id] = color
-        else:
-            raise NotImplementedError
